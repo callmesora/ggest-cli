@@ -1,0 +1,114 @@
+-- name: customers_segment_lookup
+-- description: Customer dimension: one row per customer code with derived segment, island and locality, lifetime net sales, first/last purchase and repairs; filter by segment, island or a name fragment
+-- params: segment=all, island=all, name=, limit=200
+-- Segment rules (same in every customers_* query): consumidor_final = walk-in records; publico = NIF 6xxxxxxxx or
+-- gGest group 1 'Entidades Governamentais' or public-body name (camara/municipio/freguesia/escola/secretaria/direcao regional/
+-- hospital/universidade/instituto...); associativo = associacoes, clubes, filarmonicas, misericordias, IPSS, lares, fundacoes;
+-- empresa = gGest group 2 'Empresas', NIF 5/8/9/71-79 (not 999999990), foreign VAT ids, or Lda/SA/Unipessoal in the name;
+-- particular = everything else (NIF 1-3, no NIF, NIF 999999990/'cons final').
+WITH c0 AS (
+  SELECT customer_code, name, nif, customer_group, is_walk_in,
+         ' ' || lower(replace(replace(replace(name,'.',' '),',',' '),'-',' ')) || ' ' AS n,
+         upper(replace(replace(COALESCE(nif,''),' ',''),'PT','')) AS nf
+  FROM customers),
+seg AS (
+  SELECT c0.*,
+   CASE
+    WHEN is_walk_in = 1 THEN 'consumidor_final'
+    WHEN (nf LIKE '6%' AND length(nf)=9) OR customer_group = '1' THEN 'publico'
+    WHEN n LIKE '% lda %' OR n LIKE '% limitada %' OR n LIKE '% unipessoal %' OR n LIKE '% s a %' OR n LIKE '% sgps %'
+      THEN 'empresa'
+    WHEN n LIKE '% associação %' OR n LIKE '% associacao %' OR n LIKE '% clube %' OR n LIKE '% club %'
+      OR n LIKE '% filarmónica %' OR n LIKE '% filarmonica %' OR n LIKE '% misericórdia %' OR n LIKE '% misericordia %'
+      OR n LIKE '% paróquia %' OR n LIKE '% paroquia %' OR n LIKE '% fábrica da igreja %' OR n LIKE '% casa do povo %'
+      OR n LIKE '% fundação %' OR n LIKE '% fundacao %' OR n LIKE '% bombeiros %' OR n LIKE '% sindicato %'
+      OR n LIKE '% irmandade %' OR n LIKE '% centro social %' OR n LIKE '% cooperativa %' OR n LIKE '% escuteiros %'
+      OR n LIKE '% agrupamento %' OR n LIKE '% grupo desportivo %' OR n LIKE '% ipss %'
+      OR n LIKE '% lar %' OR n LIKE '% casa de infância %' OR n LIKE '% creche %' OR n LIKE '% santa casa %'
+      THEN 'associativo'
+    WHEN n LIKE '% câmara municipal %' OR n LIKE '% camara municipal %' OR n LIKE '% município %' OR n LIKE '% municipio %'
+      OR n LIKE '% junta de freguesia %' OR n LIKE '% freguesia %'
+      OR (n LIKE '% escola %' AND n NOT LIKE '% condução %' AND n NOT LIKE '% conducao %' AND n NOT LIKE '% lda %')
+      OR n LIKE '% agrupamento de escolas %' OR n LIKE '% secretaria regional %' OR n LIKE '% direção regional %'
+      OR n LIKE '% direcção regional %' OR n LIKE '% direccao regional %' OR n LIKE '% direcao regional %'
+      OR n LIKE '% governo regional %' OR n LIKE '% assembleia legislativa %' OR n LIKE '% universidade %'
+      OR n LIKE '% hospital %' OR n LIKE '% unidade de saúde %' OR n LIKE '% centro de saúde %'
+      OR n LIKE '% tribunal %' OR n LIKE '% gnr %' OR n LIKE '% guarda nacional %' OR n LIKE '% psp %'
+      OR n LIKE '% capitania %' OR n LIKE '% entidade reguladora %' OR n LIKE '% conservatória %' OR n LIKE '% conservatoria %'
+      OR n LIKE '% serviço de desenvolvimento agrário %' OR n LIKE '% inspecção regional %' OR n LIKE '% inspeção regional %'
+      OR (n LIKE '% instituto %' AND n NOT LIKE '% s l %' AND n NOT LIKE '% lda %')
+      THEN 'publico'
+    WHEN customer_group = '2' OR nf GLOB '[589]*' AND nf <> '999999990'
+      OR (nf GLOB '7[1-9]*' AND nf NOT GLOB '7[45]*') OR (nf GLOB '[A-Z][A-Z]*' AND nf NOT LIKE 'CONS%')
+      OR n LIKE '% lda %' OR n LIKE '% limitada %' OR n LIKE '% unipessoal %' OR n LIKE '% s a %'
+      OR n LIKE '% sgps %' OR n LIKE '% crl %' OR n LIKE '% hotel %' OR n LIKE '% restaurante %' OR n LIKE '% sociedade %'
+      OR n LIKE '% snack %' OR n LIKE '% & %' OR n LIKE '% s l %'
+      THEN 'empresa'
+    ELSE 'particular'
+   END AS segment
+  FROM c0), cp AS (SELECT substr(Codigo,1,8) AS code, MIN(trim(substr(Codigo,10))) AS loc FROM codpostal GROUP BY 1),
+g0 AS (
+  SELECT c.customer_code,
+         trim(COALESCE(c.postal_code,'')) AS pc,
+         ' ' || lower(COALESCE(c.postal_code,'') || ' ' || COALESCE(c.address,'') || ' ' || COALESCE(c.address2,'')) || ' ' AS t
+  FROM customers c),
+g1 AS (
+  SELECT g0.*,
+         CASE WHEN substr(pc,1,4) GLOB '[1-9][0-9][0-9][0-9]' THEN CAST(substr(pc,1,4) AS INTEGER) END AS p4,
+         CASE WHEN substr(pc,1,4) GLOB '[1-9][0-9][0-9][0-9]' AND substr(pc,6,3) GLOB '[0-9][0-9][0-9]' THEN substr(pc,1,4)||'-'||substr(pc,6,3)
+              WHEN substr(pc,1,7) GLOB '[1-9][0-9][0-9][0-9][0-9][0-9][0-9]' THEN substr(pc,1,4)||'-'||substr(pc,5,3) END AS p7
+  FROM g0),
+geo AS (
+  SELECT g1.customer_code, g1.p4, g1.p7,
+   CASE
+    WHEN p4 BETWEEN 9900 AND 9904 OR (p4 IS NULL AND (t LIKE '% horta %' OR t LIKE '%faial%' OR t LIKE '%flamengos%'
+      OR t LIKE '%feteira%' OR t LIKE '%castelo branco%' OR t LIKE '%cedros%' OR t LIKE '%almoxarife%' OR t LIKE '%pedro miguel%'
+      OR t LIKE '%capelo%' OR t LIKE '%salão%' OR t LIKE '%ribeirinha%' OR t LIKE '%praia do norte%')) THEN 'Faial'
+    WHEN p4 BETWEEN 9930 AND 9950 OR (p4 IS NULL AND (t LIKE '%pico%' OR t LIKE '%madalena%')) THEN 'Pico'
+    WHEN p4 BETWEEN 9800 AND 9875 THEN 'São Jorge'
+    WHEN p4 = 9880 THEN 'Graciosa'
+    WHEN p4 BETWEEN 9700 AND 9760 THEN 'Terceira'
+    WHEN p4 = 9580 THEN 'Santa Maria'
+    WHEN p4 BETWEEN 9500 AND 9699 THEN 'São Miguel'
+    WHEN p4 BETWEEN 9960 AND 9970 THEN 'Flores'
+    WHEN p4 = 9980 THEN 'Corvo'
+    WHEN p4 BETWEEN 9000 AND 9399 THEN 'Madeira'
+    WHEN p4 BETWEEN 1000 AND 8999 THEN 'Continente'
+    WHEN pc = '' AND trim(t) = '' THEN 'Sem morada'
+    ELSE 'Outro/estrangeiro'
+   END AS island,
+   COALESCE(
+    CASE WHEN p4 = 9950 OR (p4 IS NULL AND t LIKE '%madalena%' AND t LIKE '%pico%') THEN 'Madalena (Pico)'
+         WHEN p4 = 9940 OR (p4 IS NULL AND (t LIKE '%são roque%' OR t LIKE '%sao roque%')) THEN 'São Roque do Pico'
+         WHEN p4 BETWEEN 9930 AND 9934 OR (p4 IS NULL AND t LIKE '%lajes do pico%') THEN 'Lajes do Pico' END,
+    CASE WHEN p4 BETWEEN 9900 AND 9904 OR p4 IS NULL THEN
+     CASE
+      WHEN t LIKE '%flamengos%' THEN 'Flamengos'
+      WHEN t LIKE '%feteira%' THEN 'Feteira'
+      WHEN t LIKE '%castelo branco%' THEN 'Castelo Branco'
+      WHEN t LIKE '%cedros%' THEN 'Cedros'
+      WHEN t LIKE '%almoxarife%' THEN 'Praia do Almoxarife'
+      WHEN t LIKE '%pedro miguel%' THEN 'Pedro Miguel'
+      WHEN t LIKE '%praia do norte%' THEN 'Praia do Norte'
+      WHEN t LIKE '%capelo%' THEN 'Capelo'
+      WHEN t LIKE '%ribeirinha%' AND (p4 IS NULL OR p4 BETWEEN 9900 AND 9904) THEN 'Ribeirinha'
+      WHEN t LIKE '%salão%' OR t LIKE '%salao%' THEN 'Salão'
+     END END,
+    CASE (SELECT loc FROM cp WHERE cp.code = g1.p7)
+      WHEN 'HORTA' THEN 'Horta (cidade)' WHEN 'FLAMENGOS' THEN 'Flamengos' WHEN 'FETEIRA HRT' THEN 'Feteira'
+      WHEN 'CASTELO BRANCO HRT' THEN 'Castelo Branco' WHEN 'CEDROS HRT' THEN 'Cedros' WHEN 'PRAIA DO ALMOXARIFE' THEN 'Praia do Almoxarife'
+      WHEN 'PEDRO MIGUEL' THEN 'Pedro Miguel' WHEN 'PRAIA DO NORTE' THEN 'Praia do Norte' WHEN 'CAPELO' THEN 'Capelo'
+      WHEN 'RIBEIRINHA HRT' THEN 'Ribeirinha' WHEN 'SALÃO' THEN 'Salão'
+      ELSE (SELECT loc FROM cp WHERE cp.code = g1.p7) END,
+    CASE WHEN p4 BETWEEN 9900 AND 9904 OR (p4 IS NULL AND (t LIKE '% horta %' OR t LIKE '%faial%')) THEN 'Faial (freguesia n/d)'
+    END) AS locality
+  FROM g1),
+f AS (SELECT customer_code, SUM(net) AS net, MIN(doc_date) AS first_purchase, MAX(doc_date) AS last_purchase FROM sales_facts GROUP BY 1),
+r AS (SELECT customer_code, COUNT(*) AS repairs, MAX(opened_on) AS last_repair FROM repairs GROUP BY 1)
+SELECT seg.customer_code, seg.name, seg.nif, seg.segment, geo.island, geo.locality, c.opened_on, c.is_inactive,
+       ROUND(COALESCE(f.net, 0), 2) AS net_sales, f.first_purchase, f.last_purchase, COALESCE(r.repairs, 0) AS repairs, r.last_repair
+FROM seg JOIN customers c USING (customer_code) LEFT JOIN geo USING (customer_code)
+LEFT JOIN f USING (customer_code) LEFT JOIN r USING (customer_code)
+WHERE (:segment = 'all' OR seg.segment = :segment) AND (:island = 'all' OR geo.island = :island)
+  AND (:name = '' OR lower(seg.name) LIKE '%' || lower(:name) || '%')
+ORDER BY net_sales DESC LIMIT :limit

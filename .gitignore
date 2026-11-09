@@ -1,0 +1,10 @@
+data/
+__pycache__/
+*.pyc
+dashboards/datasets/
+dashboards/store/
+dashboards/page/index.html
+docs/insights/
+docs/RELATORIO.md
+*.sqlite
+*.xml
