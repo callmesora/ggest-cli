@@ -1,6 +1,6 @@
 -- name: management_year_end_forecast
--- description: Full-year sales/margin projection from year-to-date, using the share of sales that came after the cut-off day in reference years (min / average / max scenarios)
--- params: cutoff=11-07, year=2026, ref_from=2022, ref_to=2024
+-- description: Full-year sales/margin projection from year-to-date, using the share of sales that came after the cut-off day in reference years (min / average / max scenarios). Defaults: cut-off = last date in the data (MM-DD), reference = the 3 previous full years
+-- params: cutoff=today_mmdd, year=this_year, ref_from=years_ago_3, ref_to=last_year
 WITH ref AS (
   SELECT year,
          SUM(CASE WHEN substr(doc_date, 6, 5) > :cutoff THEN net END) / SUM(net) AS share_after,

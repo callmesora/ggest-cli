@@ -1,6 +1,6 @@
 -- name: sales_business_lines
 -- description: Revenue and gross margin per business line (gGest software, update contracts, services, hosting, computers, consumables...) for a period, with share of sales and of margin. Services show 100% margin (labour cost not recorded).
--- params: start=2023-01-01, end=2025-12-31
+-- params: start=last_year_start, end=last_year_end
 WITH f AS (SELECT f.*, CASE
          WHEN upper(f.item_code) = 'ZZ' THEN 'ZZ - artigo generico (texto livre)'
          WHEN f.family_name = 'GOLFINHO SOFTWARE' AND f.item_code LIKE 'ACTPER%' THEN 'gGest - contratos anuais de actualizacao'

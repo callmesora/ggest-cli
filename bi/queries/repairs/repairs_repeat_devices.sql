@@ -1,6 +1,6 @@
 -- name: repairs_repeat_devices
 -- description: Repeat repairs on the same device (serial number; serials shorter than 6 chars or with odd characters such as 's/n' ignored). Per year: repairs with a usable serial, how many devices had been repaired before (installed-base loyalty) and comebacks = same serial re-opened within window_days of the previous order (quality / 'did not get fixed' signal; also includes planned returns such as RMA or parts arriving). by = year | equipment.
--- params: start=2008-01-01, end=2026-12-31, window_days=30, by=year
+-- params: start=2008-01-01, end=today, window_days=30, by=year
 WITH s AS (
   SELECT lower(replace(trim(serial_number), ' ', '')) AS s, opened_on, year,
          CASE WHEN equipment_type_code = 'not' THEN 'notebook' WHEN equipment_type_code IN ('des','all','min') THEN 'desktop'

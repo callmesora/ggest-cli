@@ -1,6 +1,6 @@
 -- name: repairs_volume
--- description: Repair orders (assistencias, OSA) per year or per month since 2007: orders, distinct customers, distinct devices (serial), orders up to the same day-of-year (ytd_until = MM-DD, for like-for-like comparison with a partial year) and change vs previous period. grain = year | month. Note: data_doc only; 2026 is partial (last order 2026-11-06).
--- params: start=2007-01-01, end=2026-12-31, grain=year, ytd_until=11-06
+-- description: Repair orders (assistencias, OSA) per year or per month since 2007: orders, distinct customers, distinct devices (serial), orders up to the same day-of-year (ytd_until = MM-DD, default = day of the last document, for like-for-like comparison with a partial year) and change vs previous period. grain = year | month. Note: data_doc only; 2026 is partial (last order 2026-11-06).
+-- params: start=2007-01-01, end=today, grain=year, ytd_until=today_mmdd
 WITH r AS (
   SELECT CASE WHEN :grain = 'month' THEN month ELSE CAST(year AS TEXT) END AS period,
          customer_code, lower(trim(serial_number)) AS serial, substr(opened_on, 6, 5) <= :ytd_until AS in_ytd

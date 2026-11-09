@@ -1,6 +1,6 @@
 -- name: repairs_revenue_by_year
 -- description: How repairs make money, per year (sales exist from 2017). labour_* = invoiced repair labour (item ASSISTENCIA 'Assistencia Tecnica - Mao de Obra' + technician travel/remote items; labour has no recorded cost, so it is ~100% gross margin) and its share of total company net sales and gross margin. osa_* = invoices converted from a repair order (origin_doc_type OSA; only used since 2024-03, so before that repairs were invoiced on separate documents): count, net, labour vs parts split and parts margin. order_* = value typed on the repair orders themselves (Lin_Assistec: parts + labour quoted/charged on the order; ~half of orders have no value = warranty, no repair, quote refused or not recorded).
--- params: start_year=2017, end_year=2026
+-- params: start_year=2017, end_year=this_year
 WITH y AS (SELECT year, COUNT(*) AS repairs FROM repairs WHERE year BETWEEN :start_year AND :end_year GROUP BY year),
 s AS (
   SELECT year, SUM(net) AS total_net, SUM(margin) AS total_margin,

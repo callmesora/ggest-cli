@@ -1,0 +1,24 @@
+{
+  "_doc": "Defaults for any gGest database. Override per database with ggest.json next to data.sqlite (see config.example.json).",
+  "company_name": "",
+  "home_region": "",
+  "internal_doc_types": [],
+  "internal_doc_name_like": ["%consumo interno%", "%cons interno%", "%cons. interno%", "%patroc%"],
+  "excluded_series_prefixes": [],
+  "default_series_group": "Main",
+  "series_groups": [],
+  "default_expense_category": "Other",
+  "expense_rules": [
+    {"category": "Staff (salaries, social security)", "name_like": ["%seguranca social%", "%segurança social%", "%vencimento%", "%salario%"]},
+    {"category": "Rent", "text_like": ["renda%", "%arrendamento%"]},
+    {"category": "Taxes", "name_like": ["%autoridade tribut%", "%financas%", "%finanças%"]},
+    {"category": "Vehicles (fuel, maintenance)", "name_like": ["%galp%", "%repsol%", "%bp %", "%prio %", "%pneu%", "%auto%"]},
+    {"category": "Energy and telecom", "name_like": ["%edp%", "%eda %", "%electricidade%", "%meo%", "%altice%", "%nos %", "%vodafone%"]},
+    {"category": "Accounting", "name_like": ["%contabilidade%", "%contabil%"]},
+    {"category": "Marketing", "name_like": ["%meta %", "%facebook%", "%google%", "%canva%", "%publicid%"]},
+    {"category": "Insurance and health", "name_like": ["%seguro%", "%insurance%", "%medicina%", "%clini%"]},
+    {"category": "Bank and payment fees", "name_like": ["%banco%", "%caixa%", "%ifthenpay%", "%easypay%", "%sibs%"]},
+    {"category": "Postage", "name_like": ["%ctt%"]}
+  ],
+  "regions": []
+}

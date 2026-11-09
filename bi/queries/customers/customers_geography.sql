@@ -1,6 +1,6 @@
 -- name: customers_geography
 -- description: Where customers are: island and locality/freguesia (from the postal code via the codpostal table, the address text, else the postal prefix) with customers on file, buying customers, net sales, margin, share, net per buyer and repair orders in the period. level = island | locality
--- params: start=2017-01-01, end=2026-12-31, level=locality
+-- params: start=2017-01-01, end=today, level=locality
 WITH cp AS (SELECT substr(Codigo,1,8) AS code, MIN(trim(substr(Codigo,10))) AS loc FROM codpostal GROUP BY 1),
 g0 AS (
   SELECT c.customer_code,

@@ -1,6 +1,6 @@
 -- name: finance_payment_methods
 -- description: Money received by payment method per year or month (granularity=year|month) from the till (Lin_caixa joined to cab_caixa, available from 2022): invoice-receipts paid at the counter (FR) + receipts of credit invoices (R) minus refunds (NCP). Methods: NUM cash, MB Multibanco card, TRB bank transfer, if/eas MB payment references (Ifthenpay/EasyPay), mbway, CHQB cheque, mypos.
--- params: granularity=year, start=2022-01-01, end=2026-12-31
+-- params: granularity=year, start=2022-01-01, end=today
 WITH m AS (
   SELECT CASE WHEN :granularity = 'month' THEN substr(c.data,1,4)||'-'||substr(c.data,5,2) ELSE substr(c.data,1,4) END AS period,
          date(substr(c.data,1,4)||'-'||substr(c.data,5,2)||'-'||substr(c.data,7,2)) AS d,

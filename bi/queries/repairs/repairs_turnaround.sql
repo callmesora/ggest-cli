@@ -1,7 +1,7 @@
 -- name: repairs_turnaround
 -- description: Turnaround (days from opening to closing the repair order) per year or per equipment group: orders, orders with a usable close date, coverage %, same-day %, <=7 days %, <=30 days %, average (0-365 d), median and p90 days. DATA QUALITY: close date (DataHora_Fecho) is only recorded 2011-2019 (+ Jan-Mar 2020); 2008-2010 and 2021+ have none, and a few rows close before they open (excluded). by = year | equipment.
 -- params: start=2011-01-01, end=2019-12-31, by=year
-WITH r AS (
+WITH r AS MATERIALIZED (
   SELECT CASE WHEN :by = 'equipment' THEN
            CASE WHEN equipment_type_code = 'not' THEN 'notebook' WHEN equipment_type_code IN ('des','all','min') THEN 'desktop'
                 WHEN equipment_type_code IN ('imp','sca') THEN 'impressora' WHEN equipment_type_code IN ('tab','ipa','pda','tel') THEN 'tablet_telemovel'

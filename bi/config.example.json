@@ -1,0 +1,26 @@
+{
+  "_doc": "Copy to ggest.json next to data.sqlite (or point GGEST_CONFIG at it), adapt, then run: py -m bi build-views. Keys you leave out keep their defaults (bi/config.default.json). Lists replace the default list.",
+  "company_name": "My Shop",
+  "home_region": "Home island",
+  "internal_doc_types": ["FRCIN", "NCCIR"],
+  "excluded_series_prefixes": ["VIA"],
+  "_excluded_series_prefixes": "invoice series that are not trading revenue (e.g. sale of a company vehicle)",
+  "series_groups": [
+    {"group": "Franchise corner", "prefixes": ["CHIP"]},
+    {"group": "Online shop", "prefixes": ["WEB"]}
+  ],
+  "_series_groups": "invoice series with a business meaning; other series fall in default_series_group",
+  "default_expense_category": "13 Other",
+  "expense_rules": [
+    {"category": "01 Staff", "codes": ["43"], "name_like": ["%seguranca social%"]},
+    {"category": "02 Rent", "text_like": ["renda%"]},
+    {"category": "11 Investment", "codes": ["137"], "text_like": ["%painei%", "%fotovolt%"], "all": true},
+    {"category": "03 Vehicles", "name_like": ["%galp%", "%pneu%"]}
+  ],
+  "_expense_rules": "first matching rule wins; codes = creditor codes (outros credores); name_like / text_like = SQL LIKE on creditor name / document text (lower case); all=true: code AND text must match",
+  "regions": [
+    {"region": "Home island", "postal_ranges": [[9900, 9904]], "locality_like": ["%horta%"]},
+    {"region": "Rest of the region", "postal_ranges": [[9500, 9980]]}
+  ],
+  "_regions": "customer regions from the 4-digit postal code or locality text (first match wins)"
+}

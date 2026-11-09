@@ -1,6 +1,6 @@
 -- name: sales_ticket_bands_by_year
 -- description: Invoices per year by ticket size (net per invoice: <50, 50-250, 250-1000, 1000-5000, >=5000 EUR): count, revenue, average ticket and share of the year. Separates everyday retail from big deals.
--- params: start_year=2017, end_year=2026
+-- params: start_year=2017, end_year=this_year
 WITH d AS (SELECT doc_id, year, SUM(net) AS net FROM sales_facts
            WHERE doc_class = 'invoice' AND year BETWEEN :start_year AND :end_year GROUP BY doc_id, year),
 b AS (SELECT year, net,

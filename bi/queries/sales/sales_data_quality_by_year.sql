@@ -1,6 +1,6 @@
 -- name: sales_data_quality_by_year
 -- description: Margin data-quality check per year: reported margin vs margin corrected for double-counted cost of assembled PCs/bundles (priced header with guessed cost + zero-price component lines with real cost), sales with estimated cost, generic ZZ item sales, hardware margin coming from lines above 60% margin (suspect low average cost) and vehicle sales counted as revenue.
--- params: start_year=2017, end_year=2026
+-- params: start_year=2017, end_year=this_year
 WITH comp AS (
   SELECT doc_id, SUM(cost) AS comp_cost FROM sales_facts
   WHERE line_kind = 'product' AND net = 0 AND cost > 0 GROUP BY doc_id),

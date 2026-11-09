@@ -1,6 +1,6 @@
 -- name: sales_recurring_revenue_by_year
 -- description: Recurring revenue estimate per year by stream: gGest annual update contracts (ACTPER*), gGest annual/cloud subscriptions, year-end close service (F/A), hosting and domains, other renewals/subscriptions; with paying customers. One-off gGest perpetual ('vitalicio') licences shown for comparison (not recurring).
--- params: start_year=2017, end_year=2026
+-- params: start_year=2017, end_year=this_year
 WITH r AS (
   SELECT year, customer_code, net,
          CASE WHEN family_name = 'GOLFINHO SOFTWARE' AND item_code LIKE 'ACTPER%' THEN 'gGest contrato anual actualizacao'

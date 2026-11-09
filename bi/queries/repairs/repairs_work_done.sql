@@ -1,12 +1,12 @@
 -- name: repairs_work_done
 -- description: What the workshop actually did, from the technician's notes (assTec_intervencao_tecnica: avaria_encontrada = diagnosis, reparacao_efetuada = work done). Keyword flags (a repair can have several): reinstalacao_so (format / OS reinstall), limpeza_virus, recuperacao_backup_dados, troca_disco, troca_motherboard, troca_fonte, ecra_lcd, troca_teclado, bateria_carregador_ficha, memoria_ssd_upgrade, limpeza_interior_termica, impressora, rma_garantia (sent to supplier RMA / covered by warranty), sem_anomalia_detetada, nao_compensa_reparar (diagnosis says uneconomical). Counts and % of repairs per period. grain = year | total.
--- params: start=2007-01-01, end=2026-12-31, grain=year
+-- params: start=2007-01-01, end=today, grain=year
 WITH x AS (
   SELECT CASE WHEN :grain = 'total' THEN 'total' ELSE substr(c.data_doc, 1, 4) END AS period,
          lower(COALESCE(i.reparacao_efetuada, '')) AS w, lower(COALESCE(i.avaria_encontrada, '')) AS d,
          lower(c.tipo_equipamento) AS eq
   FROM Cab_Assistec c
-  LEFT JOIN assTec_intervencao_tecnica i ON i.serie = c.serie AND i.numero = c.numero AND i.ano = c.ano
+  LEFT JOIN assTec_intervencao_tecnica i ON i.codigo = c.Codigo AND i.serie = c.serie AND i.numero = c.numero AND i.ano = c.ano
   WHERE c.data_doc <> '' AND c.data_doc BETWEEN replace(:start, '-', '') AND replace(:end, '-', '') || '99'),
 f AS (
   SELECT period, w <> '' AS has_work_text, d <> '' AS has_diagnosis,

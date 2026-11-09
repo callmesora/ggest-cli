@@ -1,6 +1,6 @@
 -- name: repairs_parts_used
 -- description: Parts/products charged on repair orders (Lin_Assistec product lines; labour item ASSISTENCIA and technician travel (DESLOCACAO) excluded; generic ZZ text-items and PORTES shipping excluded unless include_generic=1) grouped by catalogue family (level=family) or item (level=item): lines, repair orders, qty, net, average unit net, years seen. Shows what breaks and what the workshop sells as spare parts (disks/SSD, PSUs, memory, notebook screens/keyboards, chargers...).
--- params: start_year=2021, end_year=2026, level=family, include_generic=0, limit=40
+-- params: start_year=2021, end_year=this_year, level=family, include_generic=0, limit=40
 WITH l AS (
   SELECT rl.repair_id, rl.year, rl.item_code, rl.description, rl.qty, rl.net,
          COALESCE(NULLIF(i.family_name, ''), NULLIF(i.group_name, ''), '(sem familia)') AS family

@@ -1,6 +1,6 @@
 -- name: finance_purchases_by_origin
 -- description: Net purchases per year by supplier origin: mainland/Portuguese suppliers (VFT with country Portugal or blank), foreign suppliers invoiced on a normal VFT, intra-EU (FTINC, VAT reverse-charged) and extra-EU (FTEXC). Credit notes negative; FADIA/NCADI advance invoices net to ~0.
--- params: start_year=2017, end_year=2026
+-- params: start_year=2017, end_year=this_year
 WITH p AS (
   SELECT CAST(substr(data_doc,1,4) AS INTEGER) AS year,
          CASE WHEN Codigo = 'FTINC' THEN '2 UE intracomunitaria (FTINC)'

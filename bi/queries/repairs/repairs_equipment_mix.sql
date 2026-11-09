@@ -1,6 +1,6 @@
 -- name: repairs_equipment_mix
 -- description: Repairs by equipment group (dim=type: notebook, desktop (incl. all-in-one/mini PC), impressora, tablet_telemovel, monitor_projetor, armazenamento, ups_energia, rede, outro) or by brand (dim=brand; 'Outra/sem marca' = brand code 'out' or empty, mostly white-box desktops) per period. grain = year | total. Long format: period, key, repairs, pct_of_period. min_repairs hides tiny rows.
--- params: start=2007-01-01, end=2026-12-31, dim=type, grain=year, equipment_group=all, min_repairs=1
+-- params: start=2007-01-01, end=today, dim=type, grain=year, equipment_group=all, min_repairs=1
 WITH r AS (
   SELECT CASE WHEN :grain = 'total' THEN 'total' ELSE CAST(year AS TEXT) END AS period,
          CASE WHEN equipment_type_code = 'not' THEN 'notebook'

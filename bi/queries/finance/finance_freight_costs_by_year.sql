@@ -1,6 +1,6 @@
 -- name: finance_freight_costs_by_year
 -- description: Freight ("portes": sea/air freight, forwarders, couriers, port fees) paid on purchases vs freight charged to customers on sales, per year. Purchase freight = purchase lines whose item is in group POR (PORTES) or typed as fee (F); sales freight = sales_facts lines in group PORTES or line_kind fee. recovery_pct = charged / paid.
--- params: start_year=2017, end_year=2026
+-- params: start_year=2017, end_year=this_year
 WITH pl AS (
   SELECT CAST(substr(c.data_doc,1,4) AS INTEGER) AS year,
          CASE WHEN c.Codigo IN ('DEVNC','VNC','VNCP','NCADI') THEN -1 ELSE 1 END * CAST(l.Total AS REAL) AS net,

@@ -1,6 +1,6 @@
 -- name: sales_business_lines_by_year
 -- description: Net sales and gross margin per business line per year (long format: year x business_line), for trend / stacked charts. Current year is partial.
--- params: start_year=2017, end_year=2026
+-- params: start_year=2017, end_year=this_year
 SELECT f.year, CASE
          WHEN upper(f.item_code) = 'ZZ' THEN 'ZZ - artigo generico (texto livre)'
          WHEN f.family_name = 'GOLFINHO SOFTWARE' AND f.item_code LIKE 'ACTPER%' THEN 'gGest - contratos anuais de actualizacao'

@@ -1,6 +1,6 @@
 -- name: sales_returns_cancellations_by_year
 -- description: Per year: invoices issued, credit notes (count, value, % of invoiced value), cancelled documents (count, value, % of documents) and internal-consumption/sponsorship documents left out of sales.
--- params: start_year=2017, end_year=2026
+-- params: start_year=2017, end_year=this_year
 SELECT year,
        SUM(CASE WHEN doc_class = 'invoice' AND is_cancelled = 0 AND is_internal = 0 THEN 1 ELSE 0 END) AS invoices,
        ROUND(SUM(CASE WHEN doc_class = 'invoice' AND is_cancelled = 0 AND is_internal = 0 THEN net ELSE 0 END), 2) AS invoiced_net,

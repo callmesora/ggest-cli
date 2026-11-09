@@ -1,10 +1,14 @@
 data/
 __pycache__/
 *.pyc
+*.sqlite
+*.sqlite.building
+*.xml
+ggest.json
 dashboards/datasets/
 dashboards/store/
 dashboards/page/index.html
 docs/insights/
 docs/RELATORIO.md
-*.sqlite
-*.xml
+pipeline/layouts/*.bak
+pipeline/layouts/_relearn*

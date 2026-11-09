@@ -1,15 +1,8 @@
 -- name: finance_receivables_aging
--- description: Receivables summary by aging bucket (gross, VAT included) at as_of: documents, customers, amount and share; last row TOTAL plus the Clientes.saldo control total. Same rules as finance_receivables_open.
--- params: as_of=2026-11-08
+-- description: Receivables summary by aging bucket (gross, VAT included) at as_of: documents, customers, amount and share; last row TOTAL plus the Clientes.saldo control total. Same rules as finance_receivables_open (receivable_docs).
+-- params: as_of=today
 WITH o AS (
-  SELECT v.entidade_codigo AS customer_code,
-         CASE WHEN v.data_venc > '19000101' THEN date(substr(v.data_venc,1,4)||'-'||substr(v.data_venc,5,2)||'-'||substr(v.data_venc,7,2))
-              ELSE date(substr(v.data_doc,1,4)||'-'||substr(v.data_doc,5,2)||'-'||substr(v.data_doc,7,2)) END AS due_date,
-         CASE WHEN v.Codigo IN ('NC','NCP','NCCIR') THEN -1 ELSE 1 END
-           * (CAST(v.total_documento AS REAL) - CAST(v.Total_liquidado AS REAL)) AS open_amount
-  FROM cab_vendas v
-  WHERE v.estado_doc <> '1' AND v.data_doc <> ''
-    AND abs(CAST(v.total_documento AS REAL) - CAST(v.Total_liquidado AS REAL)) > 0.005),
+  SELECT customer_code, due_date, open_amount FROM receivable_docs WHERE is_open = 1),
 b AS (
   SELECT CASE WHEN due_date >= :as_of THEN '0 por vencer'
               WHEN due_date >= date(:as_of,'-30 days') THEN '1 vencido 1-30 dias'

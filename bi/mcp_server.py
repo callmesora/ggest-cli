@@ -1,6 +1,6 @@
 """MCP server (stdio, no dependencies) exposing the Inforbyte BI tools to AI agents.
 
-Run:   py -m bi.mcp_server
+Run:   py -m bi.mcp_server [--db path/to/data.sqlite]   (one server entry per gGest database)
 Claude Code:  claude mcp add inforbyte-bi -- py -m bi.mcp_server   (from the inforbyte-bi folder)
 or add to an MCP client config:
   {"mcpServers": {"inforbyte-bi": {"command": "py", "args": ["-m", "bi.mcp_server"],
@@ -14,15 +14,16 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import metrics
+from . import metrics, saved
 
 PROTOCOL = "2025-06-18"
 DICT = Path(__file__).resolve().parent.parent / "docs" / "DATA_DICTIONARY.md"
 INSTRUCTIONS = (
-    "Business data of Inforbyte, a computer shop in Horta (Azores): hardware sales, repairs (assistências) "
-    "and IT services, recovered from the gGest ERP. Sales history 2017+, repairs 2007+. Money is EUR net of VAT; "
-    "credit notes are negative; cancelled and internal documents are excluded. Read `data_dictionary` before "
-    "writing SQL with `query`. Prefer the specific tools; quote periods and caveats (e.g. unknown costs) in answers."
+    "Business data of a company using the gGest ERP (Golfinho Software): sales, customers, products, repairs "
+    "(assistências), purchases, stock, receivables and expenses. Money is EUR net of VAT; credit notes are negative; "
+    "cancelled and internal documents are excluded. Start with run_saved_query management_kpi_snapshot (it gives the "
+    "data date: 'today' in queries means that date) and data_dictionary. Prefer named tools, then saved_queries "
+    "(search by words), then `query` (read-only SQL on the business views). Quote periods and caveats in answers."
 )
 
 
@@ -32,18 +33,18 @@ def tool_list():
         out.append({"name": name, "description": desc,
                     "inputSchema": {"type": "object", "properties": props,
                                     "required": metrics.REQUIRED.get(name, [])}})
-    out.append({"name": "data_dictionary", "description": "Definitions of business views, columns and rules.",
-                "inputSchema": {"type": "object", "properties": {}}})
     return out
 
 
 def call(name, args):
-    if name == "data_dictionary":
-        return DICT.read_text(encoding="utf-8") if DICT.exists() else "(missing)"
     if name not in metrics.TOOLS:
         raise ValueError(f"unknown tool {name}")
     fn = metrics.TOOLS[name][0]
-    return json.dumps(fn(**(args or {})), ensure_ascii=False, default=str)
+    saved.LAST_TRUNCATED = False
+    out = fn(**saved.resolve(args or {}))
+    if saved.LAST_TRUNCATED:   # tell the model the list is incomplete, so it never sums a cut list
+        out = {"rows": out, "truncated": True, "note": "more rows exist; call again with a higher limit for totals"}
+    return json.dumps(out, ensure_ascii=False, default=str)
 
 
 def handle(msg):
@@ -54,7 +55,7 @@ def handle(msg):
         if method == "initialize":
             res = {"protocolVersion": msg.get("params", {}).get("protocolVersion", PROTOCOL),
                    "capabilities": {"tools": {}}, "instructions": INSTRUCTIONS,
-                   "serverInfo": {"name": "inforbyte-bi", "version": "1.0.0"}}
+                   "serverInfo": {"name": "ggest-bi", "version": "2.0.0"}}
         elif method == "tools/list":
             res = {"tools": tool_list()}
         elif method == "tools/call":
@@ -74,6 +75,9 @@ def handle(msg):
 
 
 def main():
+    if "--db" in sys.argv:
+        from . import db
+        db.set_db(sys.argv[sys.argv.index("--db") + 1])
     sys.stdin.reconfigure(encoding="utf-8")
     sys.stdout.reconfigure(encoding="utf-8")
     for line in sys.stdin:

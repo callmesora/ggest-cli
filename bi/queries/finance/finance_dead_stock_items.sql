@@ -1,6 +1,6 @@
 -- name: finance_dead_stock_items
 -- description: Items in stock with no sale AND no purchase for at least `months` months (dead / slow stock), valued at cost, most valuable first. Candidates for promotion, bundling, return to supplier or write-off. Same quantity/cost rules as finance_stock_value_by_group. last_sale blank = never sold since 2017.
--- params: as_of=2026-11-08, months=12, min_value=0, limit=50
+-- params: as_of=today, months=12, min_value=0, limit=50
 WITH ls AS (SELECT item_code, MAX(doc_date) AS last_sale FROM sales_facts WHERE qty > 0 GROUP BY item_code),
 st AS (
   SELECT a.Codigo AS item_code, trim(a.descricao) AS description, COALESCE(g.descricao, '(sem grupo)') AS group_name,

@@ -106,14 +106,15 @@ for name in sorted(fics, key=str.lower):
                             hashlib.sha1(r["data"]).hexdigest()))
     db.commit()
     print(f"{name}\t{n}\t{len(cols)}", flush=True)
-# business views (bi/sql/semantic.sql) so the database is ready to query
-sem = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "bi", "sql", "semantic.sql")
-if os.path.exists(sem):
-    try:
-        db.executescript(open(sem, encoding="utf-8").read())
-    except sqlite3.OperationalError as e:   # partial export (e.g. a test with a few tables)
-        print("business views skipped:", e)
 db.commit()
 db.close()
+# business views (config from ggest.json next to the database, bi/sql/semantic.sql, bi/sql/ext/*.sql)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from bi import db as bidb  # noqa: E402
+bidb.set_db(db_path)
+try:
+    bidb.build_views()
+except (sqlite3.Error, RuntimeError) as e:   # partial export (e.g. a test with a few tables)
+    print("business views skipped:", e)
 os.replace(db_path, final_path)
 print("done", final_path)

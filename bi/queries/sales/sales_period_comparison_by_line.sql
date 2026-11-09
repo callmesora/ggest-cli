@@ -1,6 +1,6 @@
 -- name: sales_period_comparison_by_line
--- description: Compare two periods (e.g. this year to date vs same period last year) per business line: net sales and margin in A and B, difference and % change, plus a TOTAL row. Default: 2025-01-01..2025-11-07 (A) vs 2026-01-01..2026-11-07 (B).
--- params: a_start=2025-01-01, a_end=2025-11-07, b_start=2026-01-01, b_end=2026-11-07
+-- description: Compare two periods (e.g. this year to date vs same period last year) per business line: net sales and margin in A and B, difference and % change, plus a TOTAL row. Default: last year to the same day (A) vs this year to date (B).
+-- params: a_start=last_year_start, a_end=today_last_year, b_start=year_start, b_end=today
 WITH f AS (SELECT f.*, CASE
          WHEN upper(f.item_code) = 'ZZ' THEN 'ZZ - artigo generico (texto livre)'
          WHEN f.family_name = 'GOLFINHO SOFTWARE' AND f.item_code LIKE 'ACTPER%' THEN 'gGest - contratos anuais de actualizacao'

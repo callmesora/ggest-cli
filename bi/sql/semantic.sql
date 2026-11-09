@@ -20,7 +20,11 @@ SELECT codigo AS doc_type, descricao AS description, tipo AS module, invoicetype
             WHEN invoicetype = 'NC' THEN 'credit_note'
             ELSE 'other' END AS doc_class,
        CASE WHEN invoicetype = 'NC' THEN -1 WHEN invoicetype IN ('FT','FR','FS') THEN 1 ELSE 0 END AS sign,
-       CASE WHEN codigo IN ('FRCIN','NCCIR','FTPTC','VIAT') THEN 1 ELSE 0 END AS is_internal
+       -- internal (not trading) document types: listed in the config, or described as internal consumption /
+       -- sponsorship (patterns in the config; see bi/config.default.json)
+       CASE WHEN codigo IN (SELECT value FROM _bi_config WHERE key = 'internal_doc_types')
+              OR EXISTS (SELECT 1 FROM _bi_config c WHERE c.key = 'internal_doc_name_like' AND lower(descricao) LIKE c.value)
+            THEN 1 ELSE 0 END AS is_internal
 FROM Documentos;
 
 -- One row per sales document (invoice / credit note) ---------------------------------------------
@@ -28,7 +32,9 @@ DROP VIEW IF EXISTS sales_docs;
 CREATE VIEW sales_docs AS
 SELECT v.Codigo || ' ' || v.serie || '/' || v.numero AS doc_id,
        v.Codigo AS doc_type, dt.description AS doc_type_name, dt.doc_class, dt.sign,
-       CASE WHEN dt.is_internal = 1 OR v.serie LIKE 'VIA%' THEN 1 ELSE 0 END AS is_internal,  -- VIA* series = vehicle sales
+       CASE WHEN dt.is_internal = 1
+              OR EXISTS (SELECT 1 FROM _bi_config c WHERE c.key = 'excluded_series_prefixes' AND v.serie LIKE c.value || '%')
+            THEN 1 ELSE 0 END AS is_internal,  -- excluded series from the config (e.g. sale of a company vehicle)
        v.serie AS series, CAST(v.numero AS INTEGER) AS number,
        date(substr(v.data_doc,1,4)||'-'||substr(v.data_doc,5,2)||'-'||substr(v.data_doc,7,2)) AS doc_date,
        CAST(substr(v.data_doc,1,4) AS INTEGER) AS year,
@@ -142,9 +148,23 @@ FROM sales_lines l
 LEFT JOIN product_cost_ratios fr ON fr.family_code = l.family_code AND fr.group_code = l.group_code
 LEFT JOIN product_cost_ratios gr ON gr.family_code IS NULL AND gr.group_code IS NULL
 WHERE l.is_cancelled = 0 AND l.is_internal = 0 AND l.doc_class IN ('invoice','credit_note') AND l.line_kind <> 'text';
+-- invoice series and its business-unit group (series_groups in ggest.json; others = default_series_group)
+ALTER TABLE sales_facts ADD COLUMN series TEXT;
+ALTER TABLE sales_facts ADD COLUMN series_group TEXT;
+UPDATE sales_facts SET series = substr(doc_id, instr(doc_id, ' ') + 1,
+                                       instr(substr(doc_id, instr(doc_id, ' ') + 1), '/') - 1);
+DROP TABLE IF EXISTS _series_map;
+CREATE TEMP TABLE _series_map AS
+SELECT s.series, COALESCE((SELECT g.series_group FROM _bi_series_groups g WHERE s.series LIKE g.series_prefix || '%'
+                           ORDER BY g.priority LIMIT 1),
+                          (SELECT value FROM _bi_config WHERE key = 'default_series_group'), 'Main') AS series_group
+FROM (SELECT DISTINCT series FROM sales_facts) s;
+UPDATE sales_facts SET series_group = (SELECT m.series_group FROM _series_map m WHERE m.series = sales_facts.series);
+DROP TABLE _series_map;
 CREATE INDEX sales_facts_date ON sales_facts(doc_date);
 CREATE INDEX sales_facts_customer ON sales_facts(customer_code);
 CREATE INDEX sales_facts_item ON sales_facts(item_code);
+CREATE INDEX sales_facts_origin ON sales_facts(origin_doc_id);
 
 -- Customers ----------------------------------------------------------------------------------------
 DROP VIEW IF EXISTS customers;
@@ -237,3 +257,7 @@ DROP VIEW IF EXISTS suppliers;
 CREATE VIEW suppliers AS
 SELECT Codigo AS supplier_code, trim(descricao) AS name, NULLIF(trim(contribuinte),'') AS nif
 FROM Fornecedores;
+
+-- speeds up quote/order -> invoice links (bi/sql/ext/sales.sql)
+CREATE INDEX IF NOT EXISTS ix_lin_vendas_origem ON lin_vendas(origem_codigo);
+CREATE INDEX IF NOT EXISTS ix_lin_mov_series_serial ON lin_mov_series(Serie_Artigo);

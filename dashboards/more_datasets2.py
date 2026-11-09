@@ -37,7 +37,7 @@ def build(save, this_year, cut):
                                                                      "b_start": f"{this_year}-01-01", "b_end": f"{this_year}-{md}"})[:10]))
 
     oh = {}
-    for r in run("finance_operating_expenses_by_category", limit=1000):
+    for r in run("finance_operating_expenses_by_category", {"start_year": 2021}, limit=1000):
         g = OVERHEAD_GROUPS.get(r["category"][:2])
         if not g:
             continue
@@ -45,7 +45,15 @@ def build(save, this_year, cut):
         row[g] = round(row[g] + (r["net"] or 0), 2)
     save("overheads_yearly", [oh[y] for y in sorted(oh)])
 
-    save("chip7_vs_shop", rows(run("sales_chip7_vs_shop_by_year")))
+    # series groups from the config (Inforbyte: Chip7 corner vs the shop), pivoted to the dashboard's columns
+    sg = {}
+    for r in run("sales_series_groups_by_year", {"start_year": 2022}):
+        row = sg.setdefault(r["year"], {"year": r["year"]})
+        k = "shop" if r["series_group"] == "Loja" else "chip7"
+        row[f"{k}_net"], row[f"{k}_margin_pct"] = r["net"], r["margin_pct"]
+        if k == "chip7":
+            row.update(chip7_margin=r["margin"], chip7_documents=r["documents"], chip7_share_pct=r["share_pct"])
+    save("chip7_vs_shop", [sg[y] for y in sorted(sg)])
 
     mix = {}
     for r in run("sales_business_lines_by_year", limit=1000):

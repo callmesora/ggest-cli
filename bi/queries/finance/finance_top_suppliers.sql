@@ -1,6 +1,6 @@
 -- name: finance_top_suppliers
 -- description: Supplier ranking by net purchases in a period (raw cab_compras, VAT excluded, credit notes negative, FTINC positive) with share, cumulative share (concentration), documents, first/last purchase and country. Note 2017 includes a one-off opening-stock transfer (VFT RV17/12017, ~49k EUR).
--- params: start=2017-01-01, end=2026-12-31, limit=25
+-- params: start=2017-01-01, end=today, limit=25
 WITH p AS (
   SELECT c.entidade_codigo AS supplier_code,
          CASE WHEN c.Codigo IN ('DEVNC','VNC','VNCP','NCADI') THEN -1 ELSE 1 END

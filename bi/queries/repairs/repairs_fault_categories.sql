@@ -1,6 +1,6 @@
 -- name: repairs_fault_categories
--- description: Reported faults (avaria descrita by the customer at reception) grouped into categories by keyword rules on the free text (first matching rule wins, in this order): dano_fisico_liquido, recuperacao_dados, impressora, nao_liga, nao_arranca_bloqueia (no boot, blue/black screen, restarts, beeps, freezes), ecra_imagem, bateria_carregador_energia, teclado_rato, sobreaquecimento_desliga, lento_virus, internet_email, som_portas_perifericos, software_windows_instalacao, manutencao_upgrade, outro. Heuristic (accents are lost in the data, '_' wildcards cover them); ~7% fall in 'outro'. grain = year | total; equipment_group = all | notebook | desktop | impressora | tablet_telemovel | outro.
--- params: start=2007-01-01, end=2026-12-31, grain=total, equipment_group=all
+-- description: Reported faults (avaria descrita by the customer at reception) grouped into categories by keyword rules on the free text (first matching rule wins, in this order): dano_fisico_liquido, recuperacao_dados, impressora, nao_liga, nao_arranca_bloqueia (no boot, blue/black screen, restarts, beeps, freezes), ecra_imagem, bateria_carregador_energia, teclado_rato, sobreaquecimento_desliga, lento_virus, internet_email, som_portas_perifericos, software_windows_instalacao, manutencao_upgrade, outro. Heuristic (accents are lost in the data, '_' wildcards cover them); ~7% fall in 'outro'. grain = year | total. FILTER BY EQUIPMENT with equipment_group = notebook | desktop | impressora | tablet_telemovel | outro (aliases accepted: not, portatil, des, imp, tablet, telemovel...; default all): repairs and pct are then counted for that equipment only and rows are sorted by that count; e.g. notebooks this year: {"equipment_group":"notebook","start":"year_start"}. Columns notebook/desktop/impressora/tablet_telemovel/outro_equip split each category by equipment.
+-- params: start=2007-01-01, end=today, grain=total, equipment_group=all
 WITH r AS (
   SELECT CASE WHEN :grain = 'total' THEN 'total' ELSE CAST(year AS TEXT) END AS period,
          lower(COALESCE(reported_fault, '')) AS t, equipment_type_code AS eq,
@@ -9,7 +9,10 @@ WITH r AS (
               WHEN equipment_type_code IN ('imp','sca') THEN 'impressora'
               WHEN equipment_type_code IN ('tab','ipa','pda','tel') THEN 'tablet_telemovel'
               ELSE 'outro' END AS equipment_group
-  FROM repairs WHERE opened_on BETWEEN :start AND :end),
+  FROM (SELECT CAST(substr(data_doc,1,4) AS INTEGER) AS year, Avaria_Descrita AS reported_fault,
+               lower(tipo_equipamento) AS equipment_type_code
+        FROM Cab_Assistec
+        WHERE data_doc <> '' AND data_doc BETWEEN replace(:start, '-', '') AND replace(:end, '-', '') || '99')),
 c AS (
   SELECT period, equipment_group,
   CASE
@@ -28,13 +31,21 @@ c AS (
    WHEN t LIKE '%formata%' OR t LIKE '%windows%' OR t LIKE '%instala%' OR t LIKE '%office%' OR t LIKE '%antivirus%' OR t LIKE '%licen_a%' OR t LIKE '%atualiza%' OR t LIKE '%actualiza%' OR t LIKE '%programa%' OR t LIKE '%configur%' OR t LIKE '%erro%' THEN 'software_windows_instalacao'
    WHEN t LIKE '%limpeza%' OR t LIKE '%revis%' OR t LIKE '%ssd%' OR t LIKE '%mem_ria%' OR t LIKE '%upgrade%' OR t LIKE '%montar%' OR t LIKE '%disco%' THEN 'manutencao_upgrade'
    ELSE 'outro' END AS fault_category
-  FROM r WHERE :equipment_group = 'all' OR equipment_group = :equipment_group),
+  FROM r WHERE lower(:equipment_group) = 'all' OR equipment_group = (CASE WHEN lower(:equipment_group) IN ('not','notebooks','portatil','portateis','laptop','laptops') THEN 'notebook'
+              WHEN lower(:equipment_group) IN ('des','desktops','computador','pc') THEN 'desktop'
+              WHEN lower(:equipment_group) IN ('imp','impressoras','printer','printers') THEN 'impressora'
+              WHEN lower(:equipment_group) IN ('tab','tablet','tablets','tel','telemovel','telemoveis','phone','phones') THEN 'tablet_telemovel'
+              ELSE lower(:equipment_group) END)),
 g AS (SELECT period, fault_category, COUNT(*) AS repairs,
              SUM(equipment_group = 'notebook') AS notebook, SUM(equipment_group = 'desktop') AS desktop,
              SUM(equipment_group = 'impressora') AS impressora, SUM(equipment_group = 'tablet_telemovel') AS tablet_telemovel,
              SUM(equipment_group = 'outro') AS outro_equip
       FROM c GROUP BY period, fault_category)
-SELECT period, fault_category, repairs,
+SELECT period, (CASE WHEN lower(:equipment_group) IN ('not','notebooks','portatil','portateis','laptop','laptops') THEN 'notebook'
+                     WHEN lower(:equipment_group) IN ('des','desktops','computador','pc') THEN 'desktop'
+                     WHEN lower(:equipment_group) IN ('imp','impressoras','printer','printers') THEN 'impressora'
+                     WHEN lower(:equipment_group) IN ('tab','tablet','tablets','tel','telemovel','telemoveis','phone','phones') THEN 'tablet_telemovel'
+                     ELSE lower(:equipment_group) END) AS equipment_filter, fault_category, repairs,
        ROUND(100.0 * repairs / SUM(repairs) OVER (PARTITION BY period), 1) AS pct_of_period,
        notebook, desktop, impressora, tablet_telemovel, outro_equip
 FROM g ORDER BY period, repairs DESC

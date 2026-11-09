@@ -1,6 +1,6 @@
 -- name: management_sales_by_user
 -- description: Sales documents, net sales, average ticket and cancellation rate per gGest user (who issued the document), per year
--- params: start_year=2022, end_year=2026
+-- params: start_year=2022, end_year=this_year
 SELECT d.year, COALESCE(u.descricao, 'user ' || d.created_by_user) AS user_name,
        SUM(d.is_cancelled = 0) AS documents,
        ROUND(SUM(CASE WHEN d.is_cancelled = 0 THEN d.net END), 0) AS net_sales,

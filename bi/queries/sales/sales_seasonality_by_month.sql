@@ -1,6 +1,6 @@
 -- name: sales_seasonality_by_month
--- description: Seasonality: average / min / max net sales, margin %, invoices and share of the year per calendar month across complete years (default 2017-2025).
--- params: start_year=2017, end_year=2025
+-- description: Seasonality: average / min / max net sales, margin %, invoices and share of the year per calendar month across complete years (default 2017 to last year).
+-- params: start_year=2017, end_year=last_year
 WITH m AS (SELECT year, CAST(substr(month, 6, 2) AS INTEGER) AS month_no, SUM(net) AS net, SUM(margin) AS margin,
                   COUNT(DISTINCT CASE WHEN doc_class = 'invoice' THEN doc_id END) AS invoices
            FROM sales_facts WHERE year BETWEEN :start_year AND :end_year GROUP BY year, month_no)

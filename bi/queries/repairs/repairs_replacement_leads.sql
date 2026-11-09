@@ -1,6 +1,6 @@
 -- name: repairs_replacement_leads
 -- description: Sales leads from the workshop: recent repairs (opened since start) of notebooks/desktops/all-in-ones/tablets where the customer probably needs a new machine - diagnosis says repair is uneconomical ('nao compensa', 'economicamente'), or a major board/CPU failure ('em circuito', 'anomalia na motherboard/board/chip/cpu', 'anomalia grave'), or the same device (serial) has had >= min_device_repairs repairs - and the customer has NOT bought new equipment (COMPUTADORES/TABLET, unit net >= 150) since the repair opened. One row per repair; walk-in customers excluded. Diagnosis text is not returned (may contain passwords).
--- params: start=2025-11-01, end=2026-12-31, min_device_repairs=4, limit=100
+-- params: start=today_last_year, end=today, min_device_repairs=4, limit=100
 WITH dev AS (
   SELECT lower(replace(trim(Numero_Serie), ' ', '')) AS s, COUNT(*) AS n
   FROM Cab_Assistec WHERE length(trim(Numero_Serie)) >= 6 GROUP BY 1),
@@ -11,7 +11,7 @@ r AS (
          lower(c.tipo_equipamento) AS eq, m.Descricao AS brand, NULLIF(c.Modelo, '') AS model,
          lower(COALESCE(i.avaria_encontrada, '')) AS d, COALESCE(dev.n, 1) AS device_repairs
   FROM Cab_Assistec c
-  LEFT JOIN assTec_intervencao_tecnica i ON i.serie = c.serie AND i.numero = c.numero AND i.ano = c.ano
+  LEFT JOIN assTec_intervencao_tecnica i ON i.codigo = c.Codigo AND i.serie = c.serie AND i.numero = c.numero AND i.ano = c.ano
   LEFT JOIN Marcas m ON m.Codigo = c.Marca
   LEFT JOIN dev ON dev.s = lower(replace(trim(c.Numero_Serie), ' ', '')) AND length(trim(c.Numero_Serie)) >= 6
   JOIN customers cu ON cu.customer_code = c.entidade_codigo AND cu.is_walk_in = 0

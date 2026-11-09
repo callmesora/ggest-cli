@@ -1,16 +1,9 @@
 -- name: finance_receivables_open
--- description: Who owes money now: open (unpaid) balance per customer from sales documents (gross, VAT included: total_documento - Total_liquidado; credit notes negative), with aging by due date (= document date for almost all invoices, payment term 'pronto'). The total reconciles with Clientes.saldo and with the totais_clientes running totals (17,286 EUR at 2026-11-08); clientes_saldo is shown per customer as a check.
--- params: as_of=2026-11-08, min_open=1, limit=50
+-- description: Who owes money now: open (unpaid) balance per customer from receivable_docs (current-account sales documents, gross, VAT included: total_documento - Total_liquidado; credit notes negative), with aging by due date (= document date for almost all invoices, payment term 'pronto'). The total reconciles with Clientes.saldo and with the totais_clientes running totals; clientes_saldo is shown per customer as a check.
+-- params: as_of=today, min_open=1, limit=50
 WITH o AS (
-  SELECT v.entidade_codigo AS customer_code, trim(v.entidade_descricao) AS doc_name,
-         date(substr(v.data_doc,1,4)||'-'||substr(v.data_doc,5,2)||'-'||substr(v.data_doc,7,2)) AS doc_date,
-         CASE WHEN v.data_venc > '19000101' THEN date(substr(v.data_venc,1,4)||'-'||substr(v.data_venc,5,2)||'-'||substr(v.data_venc,7,2))
-              ELSE date(substr(v.data_doc,1,4)||'-'||substr(v.data_doc,5,2)||'-'||substr(v.data_doc,7,2)) END AS due_date,
-         CASE WHEN v.Codigo IN ('NC','NCP','NCCIR') THEN -1 ELSE 1 END
-           * (CAST(v.total_documento AS REAL) - CAST(v.Total_liquidado AS REAL)) AS open_amount
-  FROM cab_vendas v
-  WHERE v.estado_doc <> '1' AND v.data_doc <> ''
-    AND abs(CAST(v.total_documento AS REAL) - CAST(v.Total_liquidado AS REAL)) > 0.005),
+  SELECT customer_code, customer_name AS doc_name, doc_date, due_date, open_amount
+  FROM receivable_docs WHERE is_open = 1),
 c AS (
   SELECT customer_code, MAX(doc_name) AS customer_name, COUNT(*) AS open_docs, SUM(open_amount) AS open_total,
          SUM(CASE WHEN due_date >= :as_of THEN open_amount ELSE 0 END) AS not_due,

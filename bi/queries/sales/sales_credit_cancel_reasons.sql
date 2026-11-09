@@ -1,6 +1,6 @@
 -- name: sales_credit_cancel_reasons
 -- description: Why money is given back or documents voided: credit-note reasons (raw cab_vendas.motivo_credito) and cancellation reasons (sales_docs.cancel_reason) grouped into categories (avaria, devolucao, engano no cliente/valor/artigo/tipo de documento, dados/NIF, desconto, sem motivo). Count, value and % per kind.
--- params: start=2017-01-01, end=2026-12-31
+-- params: start=last_year_start, end=today
 WITH r AS (
   SELECT 'credit_note' AS kind, d.doc_id, abs(d.net) AS net, lower(trim(COALESCE(v.motivo_credito, ''))) AS reason
   FROM sales_docs d

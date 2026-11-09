@@ -8,6 +8,8 @@ Conventions (see docs/DATA_DICTIONARY.md):
   * margin = net - qty * unit_cost (gross margin estimate; unit_cost from average cost at sale time)
   * dates are ISO 'YYYY-MM-DD'; `start` inclusive, `end` inclusive; omit for all time
 """
+from pathlib import Path
+
 from . import db
 
 PERIODS = {"year": "year", "quarter": "quarter", "month": "month", "day": "doc_date"}
@@ -87,18 +89,23 @@ def sales_by_category(level="family", start=None, end=None, limit=30):
         FROM sales_facts {w} GROUP BY 1 ORDER BY net_sales DESC LIMIT ?""", p + p + [int(limit)]))
 
 
-def top_customers(start=None, end=None, by="net", limit=20, include_walk_in=False):
-    """Customers ranked by net sales or margin, with invoices, first/last purchase and repairs count."""
+def top_customers(start=None, end=None, by="net", limit=20, include_walk_in=False, segment=None):
+    """Customers (per gGest customer code) ranked by net sales or margin, with invoices, first/last purchase and
+    repair orders of that code (all time). segment: publico | empresa | particular | associativo (customer_dim)."""
     order = {"net": "net_sales", "margin": "gross_margin", "invoices": "invoices"}[by]
     extra = [] if include_walk_in else ["customer_code NOT IN (SELECT customer_code FROM customers WHERE is_walk_in = 1)"]
+    if segment:
+        extra.append("customer_code IN (SELECT customer_code FROM customer_dim WHERE segment = ?)")
     w, p = _where(start, end, extra)
+    if segment:
+        p.append(segment)          # extra conditions come after the date params
     return _clean(db.rows(f"""
         WITH s AS (
           SELECT customer_code, MAX(customer_name) AS customer, SUM(net) AS net_sales, SUM(margin) AS gross_margin,
                  COUNT(DISTINCT doc_id) AS invoices, MIN(doc_date) AS first_purchase, MAX(doc_date) AS last_purchase
           FROM sales_facts {w} GROUP BY customer_code)
         SELECT s.*, 100.0*gross_margin/NULLIF(net_sales,0) AS margin_pct,
-               (SELECT COUNT(*) FROM repairs r WHERE r.customer_code = s.customer_code) AS repairs_all_time
+               (SELECT COUNT(*) FROM repairs r WHERE r.customer_code = s.customer_code) AS repair_orders_this_code_all_time
         FROM s ORDER BY {order} DESC LIMIT ?""", p + [int(limit)]))
 
 
@@ -132,7 +139,7 @@ def customer_profile(query, limit_items=15):
                                        GROUP BY 1 ORDER BY 4 DESC LIMIT ?""", (code, limit_items)))
     c["repairs"] = db.rows("""SELECT COUNT(*) AS total, MIN(opened_on) AS first, MAX(opened_on) AS last
                               FROM repairs WHERE customer_code = ?""", (code,))[0]
-    c["recent_repairs"] = db.rows("""SELECT repair_id, opened_on, equipment_type, brand_name, reported_fault, status
+    c["recent_repairs"] = db.rows("""SELECT repair_id, opened_on, equipment_type, brand_name, model, status
                                      FROM repairs WHERE customer_code = ? ORDER BY opened_on DESC LIMIT 5""", (code,))
     return c
 
@@ -171,10 +178,20 @@ def year_over_year(start_year=None, end_year=None):
     rows = sales_over_time("year")
     rows = [r for r in rows if r["period"] and (start_year is None or r["period"] >= int(start_year))
             and (end_year is None or r["period"] <= int(end_year))]
+    from . import saved
+    w = saved.date_words()
     prev = None
     for r in rows:
         r["growth_pct"] = round(100 * (r["net_sales"] / prev - 1), 1) if prev else None
+        r["basis"] = "full year"
         prev = r["net_sales"]
+    last = rows[-1] if rows else None
+    if last and last["period"] == w["this_year"] and w["today_mmdd"] != "12-31":
+        # partial year: compare with the same days of the previous year, never with the full year
+        ly = db.rows("SELECT SUM(net) AS n FROM sales_facts WHERE doc_date BETWEEN ? AND ?",
+                     (w["last_year_start"], w["today_last_year"]))[0]["n"]
+        last["growth_pct"] = round(100 * (last["net_sales"] / ly - 1), 1) if ly else None
+        last["basis"] = f"year to date (01-01..{w['today_mmdd']}) vs same days last year"
     return rows
 
 
@@ -233,11 +250,16 @@ def repair_revenue(period="year", start=None, end=None):
     return _clean(svc)
 
 
-def common_faults(limit=30, start=None, end=None):
-    """Most frequent reported faults (normalised text), to see what breaks most."""
-    w, p = _where(start, end, ["reported_fault IS NOT NULL", "trim(reported_fault) <> ''"], date_col="opened_on")
-    return db.rows(f"""SELECT lower(trim(reported_fault)) AS fault, COUNT(*) AS repairs FROM repairs {w}
-                       GROUP BY 1 ORDER BY 2 DESC LIMIT ?""", p + [int(limit)])
+def common_faults(start=None, end=None, grain="total", equipment_group="all"):
+    """What breaks most: reported faults grouped into categories by keyword rules (the raw fault text is never
+    returned: customers often write passwords/PINs in it). Same as saved query repairs_fault_categories."""
+    from . import saved
+    p = {"grain": grain, "equipment_group": equipment_group}
+    if start:
+        p["start"] = start
+    if end:
+        p["end"] = end
+    return saved.run_saved_query("repairs_fault_categories", p)
 
 
 # --- Purchases ----------------------------------------------------------------------------------------
@@ -269,9 +291,14 @@ def describe(name=None):
         return db.rows("SELECT name, type FROM sqlite_master WHERE type='view' ORDER BY name")
     if db._SECRET.search(name):
         return {"error": f"{name} holds passwords and is not available through this tool"}
-    cols = db.rows(f"SELECT name, type FROM pragma_table_info(?)", (name,))
-    sample = db.rows(f'SELECT * FROM "{name}" LIMIT 3') if cols else []
-    return {"name": name, "columns": cols, "sample": sample}
+    cols = db.rows(f"SELECT name FROM pragma_table_info(?)", (name,))
+    if not cols:
+        raise ValueError(f"no view or table named {name!r}; `describe` without a name lists the views")
+    if any(db._SECRET_COL.match(c["name"]) for c in cols):
+        return {"name": name, "columns": ", ".join(c["name"] for c in cols if not db._SECRET_COL.match(c["name"])),
+                "note": "credential columns hidden; table not queryable as SELECT *"}
+    sample = db.rows(f'SELECT * FROM "{name}" LIMIT 2')
+    return {"name": name, "columns": ", ".join(c["name"] for c in cols), "sample": sample}
 
 
 def query(sql, limit=200):
@@ -295,9 +322,11 @@ TOOLS = {
     "sales_by_category": (sales_by_category, "Sales and margin by product group, family, brand or kind.",
                           {"level": {"type": "string", "enum": ["group", "family", "brand", "kind"]},
                            "start": _D, "end": _D, "limit": {"type": "integer"}}),
-    "top_customers": (top_customers, "Customers ranked by net sales, margin or number of invoices.",
+    "top_customers": (top_customers, "Customers (per customer code) ranked by net sales, margin or invoices; optional "
+                      "segment filter. For legal entities merged by NIF use saved query customers_top_entities.",
                       {"start": _D, "end": _D, "by": {"type": "string", "enum": ["net", "margin", "invoices"]},
-                       "limit": {"type": "integer"}, "include_walk_in": {"type": "boolean"}}),
+                       "limit": {"type": "integer"}, "include_walk_in": {"type": "boolean"},
+                       "segment": {"type": "string", "enum": ["publico", "empresa", "particular", "associativo"]}}),
     "customer_concentration": (customer_concentration, "Share of sales from the top 1/10/20/50/100 customers.",
                                {"start": _D, "end": _D}),
     "customer_profile": (customer_profile, "Full profile of one customer by code, NIF or part of the name.",
@@ -315,7 +344,9 @@ TOOLS = {
     "repair_turnaround": (repair_turnaround, "Days to close repairs, per year.", {"start": _D, "end": _D}),
     "repair_revenue": (repair_revenue, "Service (labour) revenue vs repairs opened.",
                        {"period": {"type": "string", "enum": ["year", "quarter", "month"]}, "start": _D, "end": _D}),
-    "common_faults": (common_faults, "Most frequent reported faults.", {"limit": {"type": "integer"}, "start": _D, "end": _D}),
+    "common_faults": (common_faults, "What breaks most: reported faults grouped into categories (no raw text). grain=total|year.",
+                      {"start": _D, "end": _D, "grain": {"type": "string", "enum": ["total", "year"]},
+                       "equipment_group": {"type": "string", "enum": ["all", "notebook", "desktop", "impressora", "tablet_telemovel", "outro"]}}),
     "purchases_by_supplier": (purchases_by_supplier, "Net purchases per supplier.",
                               {"start": _D, "end": _D, "limit": {"type": "integer"}}),
     "purchases_vs_sales": (purchases_vs_sales, "Purchases vs sales per year or month.",
@@ -327,8 +358,26 @@ TOOLS = {
               {"sql": {"type": "string"}, "limit": {"type": "integer"}}),
 }
 from . import saved as _saved  # noqa: E402
-TOOLS["saved_queries"] = (_saved.saved_queries, "List the saved-query library (reusable, documented SQL by domain).",
-                          {"domain": {"type": "string"}})
+def data_dictionary(topic=None):
+    """Definitions and rules (docs/DATA_DICTIONARY.md), or one domain's notes (docs/domains/<topic>.md)."""
+    docs = Path(__file__).resolve().parent.parent / "docs"
+    topics = sorted(p.stem for p in (docs / "domains").glob("*.md"))
+    if topic:
+        p = docs / "domains" / f"{topic}.md"
+        if not p.exists():
+            raise ValueError(f"unknown topic {topic!r}; topics: {', '.join(topics)}")
+        return p.read_text(encoding="utf-8")
+    note = f"Domain notes (data_dictionary --topic X): {', '.join(topics)}"
+    return (docs / "DATA_DICTIONARY.md").read_text(encoding="utf-8") + "\n\n" + note + "\n"
+
+
+TOOLS["data_dictionary"] = (data_dictionary, "Read first: business definitions, rules and caveats; topic=<domain> for "
+                            "a domain's tables, codes and traps (sales, customers, repairs, finance, stock, operations).",
+                            {"topic": {"type": "string"}})
+TOOLS["saved_queries"] = (_saved.saved_queries,
+                          "Search the saved-query library (documented SQL for most business questions). Filter by domain "
+                          "folder (sales, customers, repairs, finance, stock, management, ...) and/or words in name/description.",
+                          {"domain": {"type": "string"}, "search": {"type": "string"}})
 TOOLS["run_saved_query"] = (_saved.run_saved_query, "Run a saved query by name; params override its defaults.",
                             {"name": {"type": "string"}, "params": {"type": "object"}, "limit": {"type": "integer"}})
 REQUIRED = {"customer_profile": ["query"], "product_profile": ["query"], "query": ["sql"], "run_saved_query": ["name"]}

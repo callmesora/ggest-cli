@@ -1,6 +1,6 @@
 -- name: finance_days_to_pay_by_year
 -- description: Collection speed of credit invoices (FT and FTGOL, i.e. not paid at the counter) per invoice year: days from invoice date to the date of the (last) receipt R that settled it (lin_recpag.liquida_*; cancelled receipts excluded). avg_days, value-weighted days, median-ish share paid same day / within 30 / over 60 days. Invoices still open are excluded from the averages and counted in still_open (recent years are therefore biased low).
--- params: start_year=2017, end_year=2026
+-- params: start_year=2017, end_year=this_year
 WITH r AS (
   SELECT l.liquida_codigo AS t, l.liquida_serie AS s, l.liquida_numero AS n, MAX(l.data_doc) AS paid_on
   FROM lin_recpag l

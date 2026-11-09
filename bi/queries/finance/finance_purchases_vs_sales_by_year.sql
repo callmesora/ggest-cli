@@ -1,6 +1,6 @@
 -- name: finance_purchases_vs_sales_by_year
 -- description: Purchases (supplier invoices net of VAT, credit notes negative, read from raw cab_compras so intra-EU FTINC invoices count POSITIVE) vs net sales, product COGS and estimated margin from sales_facts, per year. implied_margin_pct = (sales - purchases) / sales is a cash cross-check of the sales_facts margin; purchases_minus_cogs > 0 means stock was built up. cutoff_mmdd limits every year to 01-01..cutoff for like-for-like comparisons (e.g. 11-07).
--- params: start_year=2017, end_year=2026, cutoff_mmdd=12-31
+-- params: start_year=2017, end_year=this_year, cutoff_mmdd=12-31
 WITH p AS (
   SELECT CAST(substr(data_doc,1,4) AS INTEGER) AS year,
          SUM(CASE WHEN Codigo IN ('DEVNC','VNC','VNCP','NCADI') THEN -1 ELSE 1 END
