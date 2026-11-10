@@ -96,7 +96,15 @@ def rows(sql: str, params: Sequence[Any] | dict[str, Any] = (), limit: int | Non
         return [dict(r) for r in (cur.fetchmany(limit) if limit else cur.fetchall())]
 
 
-def safe_query(sql: str, limit: int = 500) -> dict[str, Any]:
+def fetch_page(cur: sqlite3.Cursor, limit: int, offset: int = 0) -> tuple[list[Any], bool]:
+    """Rows offset..offset+limit of a cursor, and whether more rows follow."""
+    if offset:
+        cur.fetchmany(offset)  # skip earlier pages
+    data = cur.fetchmany(limit + 1)
+    return data[:limit], len(data) > limit
+
+
+def safe_query(sql: str, limit: int = 500, offset: int = 0) -> dict[str, Any]:
     """Read-only ad-hoc SQL for agents: single SELECT/WITH statement, row cap, read-only connection."""
     statement = security.check_read_only(sql)
     with reading() as con:
@@ -104,5 +112,6 @@ def safe_query(sql: str, limit: int = 500) -> dict[str, Any]:
         cols = [c[0] for c in cur.description]
         if any(security.is_secret_column(c) for c in cols):  # e.g. SELECT * on a table with a credential column
             raise ValueError(security.SECRET_MESSAGE)
-        data = cur.fetchmany(limit + 1)
-    return {"columns": cols, "rows": [list(r) for r in data[:limit]], "truncated": len(data) > limit}
+        data, more = fetch_page(cur, limit, offset)
+    out = {"columns": cols, "rows": [list(r) for r in data], "truncated": more}
+    return {**out, "next_offset": offset + limit} if more else out

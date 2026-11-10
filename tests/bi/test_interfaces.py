@@ -82,6 +82,7 @@ def test_params_option_and_truncation_note(run, tmp_path: Path, monkeypatch: pyt
     cut = run("run_saved_query", "--name", "years", "--params", "since=2025-01-01", "--limit", "1")
     assert "2025" in cut.output
     assert "NOTE: more rows exist" in cut.output
+    assert "--offset 1" in cut.output
     assert run("run_saved_query", "--name", "years", "--params", "bad").exit_code == 2
     listing = run("saved_queries", "--search", "years")
     assert "1 saved queries" in listing.output

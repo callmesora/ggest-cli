@@ -89,7 +89,8 @@ def emit(name: str, out: Any, *, as_json: bool) -> None:
     else:
         click.echo(render.table(out))
     if render.is_truncated(out):
-        note = "\nNOTE: more rows exist than shown (limit reached); rerun with a higher --limit for totals."
+        page = f"--offset {out['next_offset']} for the next page, or " if "next_offset" in out else ""
+        note = f"\nNOTE: more rows exist than shown; rerun with {page}a higher --limit. Do not total this page."
         click.echo(note, err=as_json)
 
 

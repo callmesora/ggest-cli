@@ -148,7 +148,9 @@ def test_read_only_connection_cannot_write(fake_db: Path) -> None:
 
 def test_safe_query(fake_db: Path) -> None:
     out = db.safe_query("SELECT customer_code FROM customers ORDER BY 1", limit=2)
-    assert out == {"columns": ["customer_code"], "rows": [["C1"], ["C2"]], "truncated": True}
+    assert out == {"columns": ["customer_code"], "rows": [["C1"], ["C2"]], "truncated": True, "next_offset": 2}
+    page2 = db.safe_query("SELECT customer_code FROM customers ORDER BY 1", limit=2, offset=2)
+    assert page2 == {"columns": ["customer_code"], "rows": [["C3"], ["WALK"]], "truncated": False}
     with pytest.raises(ValueError, match="password"):
         db.safe_query("SELECT * FROM contacts")  # a credential column only visible in the result
 

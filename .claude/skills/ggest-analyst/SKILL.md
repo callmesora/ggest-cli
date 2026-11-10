@@ -18,8 +18,8 @@ Run everything from the project root. Read-only: nothing here can change gGest.
 2. A saved query: `uv run ggest saved_queries --search "<words>"` (or `--domain sales|customers|repairs|finance|stock|operations|management|setup`),
    which lists one line per query (name, summary, params). Read the chosen query's full description before
    quoting its numbers — it states their rules and caveats: `uv run ggest saved_queries --name <name>`. Then
-   `uv run ggest run_saved_query --name <name> --params '{"start": "2024-01-01"}'` (100 rows by default; a NOTE
-   says when the list was cut: raise `--limit` before totalling).
+   `uv run ggest run_saved_query --name <name> --params '{"start": "2024-01-01"}'` (100 rows per page; a NOTE
+   says when the list was cut and gives the `--offset` of the next page; or raise `--limit`. Never total a page).
 3. Ad-hoc SQL on the business views: `uv run ggest query --sql "SELECT ..."` (one SELECT/WITH, 200-row cap).
    `uv run ggest describe --name <view or table>` lists columns. Prefer views (sales_facts, sales_docs, customers,
    items, repairs, purchase_docs, ...) over raw gGest tables.

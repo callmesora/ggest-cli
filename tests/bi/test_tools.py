@@ -227,7 +227,22 @@ def test_run_saved_query_tool_marks_cut_lists(query_dir: Path) -> None:
     out = metrics.run_saved_query("test_sales_by_year", limit=1)
     assert out["truncated"]
     assert out["note"] == explore.TRUNCATED_NOTE
+    assert out["next_offset"] == 1
     assert isinstance(metrics.run_saved_query("test_sales_by_year"), list)
+
+
+def test_paging_walks_every_row_once(query_dir: Path) -> None:
+    every = metrics.run_saved_query("test_sales_by_year", {"start": "2000-01-01"})
+    pages, offset = [], 0
+    while True:
+        out = metrics.run_saved_query("test_sales_by_year", {"start": "2000-01-01"}, limit=1, offset=offset)
+        if isinstance(out, list):
+            pages += out
+            break
+        pages += out["rows"]
+        offset = out["next_offset"]
+    assert pages == every
+    assert len(every) == 3
 
 
 def test_check_reports_each_query(query_dir: Path) -> None:
@@ -248,7 +263,7 @@ def test_registry_reads_signatures() -> None:
     assert "date word" in p["start"].description
     assert p["start"].kind is str
     required = {x.name: x.required for x in params(TOOLS["run_saved_query"].fn)}
-    assert required == {"name": True, "params": False, "limit": False}
+    assert required == {"name": True, "params": False, "limit": False, "offset": False}
 
 
 def test_tool_call_resolves_date_words() -> None:

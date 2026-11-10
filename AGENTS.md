@@ -19,8 +19,9 @@ question: sales, margin, customers, quotes, repairs, warranty, stock, purchasing
 - MCP: `uv run ggest-mcp [--db <path>]` (FastMCP, stdio) exposes the same tools, all marked read-only. Tables
   come back as `{columns, rows}` (names once, not per row); `truncated: true` means cut at `limit`.
 - Context budget: `saved_queries` lists one line per query, so search or filter by domain first; `--name`
-  gives one query in full. Results default to 100 rows (`run_saved_query`) / 200 (`query`); ask for totals with
-  a summary query rather than raising limits to thousands of rows.
+  gives one query in full, `--full` every description. Results come in pages of 100 rows (`run_saved_query`) /
+  200 (`query`); nothing is capped: raise `limit`, or page with `offset` = the `next_offset` a cut result gives.
+  For totals prefer a summary query (or GROUP BY) over paging through raw rows.
 - Date words in any date/year parameter: `today`, `year_start`, `this_year`, `last_year`, `last_year_start`,
   `last_year_end`, `today_last_year`, `today_mmdd`, `years_ago_3`.
 

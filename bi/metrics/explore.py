@@ -8,7 +8,7 @@ from .. import db, saved, security
 from ..registry import tool
 
 DOCS = db.PROJECT / "docs"
-TRUNCATED_NOTE = "more rows exist; call again with a higher limit for totals"
+TRUNCATED_NOTE = "more rows follow: call again with offset=next_offset (or a higher limit); do not total this page"
 
 
 def _topics() -> list[str]:
@@ -49,19 +49,21 @@ def saved_queries(
 
 @tool(
     "Run a saved query by name (find names with saved_queries). params override its defaults and accept "
-    "date words (today, year_start, last_year_start, today_last_year...). Returns columns + rows; when "
-    "more rows exist than limit, truncated=true: never sum a truncated list, raise limit or use a summary"
-    " query."
+    "date words (today, year_start, last_year_start, today_last_year...); queries with a limit param take "
+    "params.limit for their own top-N. Returns columns + rows. When more rows exist, truncated=true and "
+    "next_offset: call again with offset=next_offset for the next page, or a higher limit. Never sum a "
+    "truncated list."
 )
 def run_saved_query(
     name: Annotated[str, Field(description="saved query name, from saved_queries")],
     params: Annotated[dict[str, Any] | None, Field(description='overrides, e.g. {"start": "2025-01-01"}')] = None,
-    limit: Annotated[int, Field(description="maximum rows returned")] = 100,
+    limit: Annotated[int, Field(description="rows per page (no maximum)")] = 100,
+    offset: Annotated[int, Field(description="rows to skip: next_offset of the previous page")] = 0,
 ) -> Any:
-    """Rows of the query; when more rows existed than `limit`: {rows, truncated, note} so nobody sums a cut list."""
-    page = saved.run_page(name, params, limit)
+    """Rows of the query; when more rows follow: {rows, truncated, next_offset, note} so nobody sums a cut list."""
+    page = saved.run_page(name, params, limit, offset)
     if page.truncated:
-        return {"rows": page.rows, "truncated": True, "note": TRUNCATED_NOTE}
+        return {"rows": page.rows, "truncated": True, "next_offset": offset + limit, "note": TRUNCATED_NOTE}
     return page.rows
 
 
@@ -88,9 +90,14 @@ def describe(name: str | None = None) -> Any:
 @tool(
     "Last resort when no named tool or saved query fits: one read-only SELECT/WITH statement over the "
     "business views (sales_facts, sales_docs, customers, customer_dim, items, repairs, purchase_docs, "
-    "receivable_docs...; see describe and data_dictionary). Max limit rows. Credential tables/columns are"
-    " refused."
+    "receivable_docs...; see describe and data_dictionary). Returns columns + rows, limit rows per page; "
+    "truncated=true with next_offset when more follow (call again with offset). Prefer GROUP BY totals to "
+    "paging through raw rows. Credential tables/columns are refused."
 )
-def query(sql: str, limit: int = 200) -> dict:
-    """Read-only SQL over business views and raw tables. Max `limit` rows."""
-    return db.safe_query(sql, int(limit))
+def query(
+    sql: str,
+    limit: Annotated[int, Field(description="rows per page (no maximum)")] = 200,
+    offset: Annotated[int, Field(description="rows to skip: next_offset of the previous page")] = 0,
+) -> dict:
+    """Read-only SQL over business views and raw tables, one page of rows."""
+    return db.safe_query(sql, int(limit), int(offset))

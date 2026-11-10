@@ -130,17 +130,17 @@ def _round(value: Any) -> Any:
     return round(value, 2) if isinstance(value, float) else value
 
 
-def run_page(name: str, params: dict[str, Any] | None = None, limit: int = 500) -> Page:
-    """Run a saved query by name; `params` override its defaults. Says whether rows were cut at `limit`."""
+def run_page(name: str, params: dict[str, Any] | None = None, limit: int = 500, offset: int = 0) -> Page:
+    """Run a saved query by name; `params` override its defaults. Rows offset..offset+limit, and whether more
+    rows follow."""
     query = get(name)
     values = dates.resolve({**query.params, **(params or {})})
-    limit = int(limit)
     with db.reading() as con:
         cur = con.execute(query.sql, values)
         cols = [c[0] for c in cur.description]
-        data = cur.fetchmany(limit + 1)
-    rows = [dict(zip(cols, map(_round, r), strict=True)) for r in data[:limit]]
-    return Page(rows, truncated=len(data) > limit)
+        data, more = db.fetch_page(cur, int(limit), int(offset))
+    rows = [dict(zip(cols, map(_round, r), strict=True)) for r in data]
+    return Page(rows, truncated=more)
 
 
 def run_saved_query(name: str, params: dict[str, Any] | None = None, limit: int = 500) -> list[dict[str, Any]]:
