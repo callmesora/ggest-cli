@@ -83,7 +83,7 @@ def test_store_path_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_models() -> None:
     assert models.as_list()[0]["id"] == models.DEFAULT_MODEL
-    assert models.label(models.DEFAULT_MODEL).startswith("Claude")
+    assert models.label(models.DEFAULT_MODEL).startswith("DeepSeek")
     assert models.label("x/y") == "x/y"
 
 
