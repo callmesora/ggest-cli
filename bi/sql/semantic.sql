@@ -60,8 +60,11 @@ WHERE dt.module = 'VND' AND v.data_doc <> '';
 -- unit_cost = average cost at sale time (pmc); when missing, the item's last purchase net price;
 -- cost_source says which was used ('pmc', 'last_purchase', 'in_bundle', 'in_components', 'unknown', ...).
 DROP VIEW IF EXISTS sales_lines;
-CREATE VIEW sales_lines AS
-SELECT d.doc_id, d.doc_type, d.doc_class, d.sign, d.is_internal, d.is_cancelled,
+DROP VIEW IF EXISTS sales_lines_base;
+CREATE VIEW sales_lines_base AS
+SELECT CAST(l.pmc AS REAL) AS raw_pmc, l.movstock AS raw_movstock, a.tipo AS item_kind,
+       COALESCE(CAST(a.ultc_doc_precoliq AS REAL), 0) AS item_last_cost, l.Componente_artigo AS component_flag,
+       d.doc_id, d.doc_type, d.doc_class, d.sign, d.is_internal, d.is_cancelled,
        d.doc_date, d.year, d.month, d.quarter, d.customer_code, d.customer_name,
        CAST(l.linha AS INTEGER) AS line_no,
        NULLIF(trim(l.Artigo),'') AS item_code, trim(l.descricao) AS item_description,
@@ -117,6 +120,39 @@ LEFT JOIN Grupos g ON g.Codigo = a.grupo
 LEFT JOIN Familias f ON f.Codigo = a.familia AND f.grupo = a.grupo
 LEFT JOIN Marcas m ON m.Codigo = a.Marca;
 
+-- Service work typed as a product line (e.g. "consultadoria", "implementação da rede" on the generic item, or a
+-- service item sold with line type A) counts as a service: line_kind 'service', no cost (labour is an overhead).
+-- kind_rule says why: 'service_item' (catalogue item is a service: Artigos.tipo E/H, a group in
+-- service_group_names, or a code in service_item_codes) or 'service_text' (no recorded cost, no stock movement,
+-- description matches service_description_like). Codes in product_item_codes are never reclassified.
+-- All lists come from ggest.json (defaults in bi/config.default.json).
+DROP VIEW IF EXISTS sales_lines;
+CREATE VIEW sales_lines AS
+WITH k AS (
+  SELECT b.*,
+         CASE WHEN b.line_kind <> 'product' OR b.component_flag = '8' OR b.line_role = 'bundle_component'
+                   OR b.cost_source IN ('in_bundle', 'in_components')
+                   OR b.item_code IN (SELECT value FROM _bi_config WHERE key = 'product_item_codes') THEN NULL
+              WHEN b.item_kind IN ('E','H')
+                   OR b.item_code IN (SELECT value FROM _bi_config WHERE key = 'service_item_codes')
+                   OR upper(b.group_name) IN (SELECT upper(value) FROM _bi_config WHERE key = 'service_group_names')
+                   THEN 'service_item'
+              WHEN b.raw_pmc = 0 AND b.raw_movstock = '0'
+                   AND (upper(b.item_code) = 'ZZ' OR lower(b.item_code) LIKE '%diverso%' OR b.item_last_cost = 0)
+                   AND EXISTS (SELECT 1 FROM _bi_config c WHERE c.key = 'service_description_like'
+                               AND lower(b.item_description) LIKE c.value)
+                   THEN 'service_text'
+         END AS kind_rule
+  FROM sales_lines_base b)
+SELECT doc_id, doc_type, doc_class, sign, is_internal, is_cancelled, doc_date, year, month, quarter,
+       customer_code, customer_name, line_no, item_code, item_description,
+       CASE WHEN kind_rule IS NOT NULL THEN 'service' ELSE line_kind END AS line_kind,
+       group_code, group_name, family_code, family_name, brand_code, brand_name, qty, unit_price_net, net,
+       CASE WHEN kind_rule IS NOT NULL THEN 0 ELSE unit_cost END AS unit_cost,
+       CASE WHEN kind_rule IS NOT NULL THEN 'not_applicable' ELSE cost_source END AS cost_source,
+       line_role, origin_doc_type, origin_doc_id, kind_rule
+FROM k;
+
 -- Cost-to-sales ratio of products whose cost is known, per family and overall: used to ESTIMATE the cost
 -- of product lines without one (cost_source 'unknown' -> 'estimated').
 -- (materialised as tables for speed; rebuilt by `py -m bi build-views`)
@@ -143,7 +179,7 @@ SELECT l.doc_id, l.doc_type, l.doc_class, l.sign, l.is_internal, l.is_cancelled,
        CASE WHEN l.cost_source = 'unknown' THEN l.net * COALESCE(fr.cost_ratio, gr.cost_ratio) ELSE l.qty * l.unit_cost END AS cost,
        l.net - CASE WHEN l.cost_source = 'unknown' THEN l.net * COALESCE(fr.cost_ratio, gr.cost_ratio) ELSE l.qty * l.unit_cost END AS margin,
        l.unit_cost, CASE WHEN l.cost_source = 'unknown' THEN 'estimated' ELSE l.cost_source END AS cost_source,
-       l.line_role, l.origin_doc_type, l.origin_doc_id
+       l.line_role, l.origin_doc_type, l.origin_doc_id, l.kind_rule
 FROM sales_lines l
 LEFT JOIN product_cost_ratios fr ON fr.family_code = l.family_code AND fr.group_code = l.group_code
 LEFT JOIN product_cost_ratios gr ON gr.family_code IS NULL AND gr.group_code IS NULL

@@ -52,7 +52,8 @@ Use for revenue, margin, products, customers. Columns:
 | doc_date, year, quarter, month | document date (ISO), `2025`, `2025-Q4`, `2025-11` |
 | customer_code, customer_name | customer (`customers.customer_code`); name as printed on the document |
 | item_code, item_description | item (`items.item_code`); `ZZ` = generic "miscellaneous" item typed by hand |
-| line_kind | `product` (goods), `service` (labour/assistance, hosting…), `fee` (shipping etc.) |
+| line_kind | `product` (goods), `service` (labour/assistance, hosting…), `fee` (shipping etc.). Service work typed as a product line also counts as `service` with no cost (see `kind_rule`) |
+| kind_rule | why a product line was counted as a service: `service_item` (the catalogue item is a service: kind E, a group in `service_group_names` or a code in `service_item_codes`) or `service_text` (no recorded cost, no stock movement, description like "consultadoria", "implementação", "reparação", "deslocação"… from `service_description_like`); NULL otherwise. Configurable in ggest.json; `product_item_codes` opts items out |
 | group_name, family_name, brand_name | catalogue classification (group > family), brand |
 | qty | quantity (negative on credit notes) |
 | unit_price_net | unit price before VAT |

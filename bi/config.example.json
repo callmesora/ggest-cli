@@ -9,7 +9,10 @@
     {"group": "Franchise corner", "prefixes": ["CHIP"]},
     {"group": "Online shop", "prefixes": ["WEB"]}
   ],
-  "_series_groups": "invoice series with a business meaning; other series fall in default_series_group",
+  "service_item_codes": ["MAOOBRA"],
+  "product_item_codes": ["rede"],
+  "_service_items": "service_item_codes: always count these items as services (no cost); product_item_codes: never reclassify these (e.g. a bundle of equipment + labour with a real cost). Keywords: service_description_like (see config.default.json)",
+  "_series_groups":"invoice series with a business meaning; other series fall in default_series_group",
   "default_expense_category": "13 Other",
   "expense_rules": [
     {"category": "01 Staff", "codes": ["43"], "name_like": ["%seguranca social%"]},

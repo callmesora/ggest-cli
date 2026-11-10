@@ -50,7 +50,8 @@ def apply(con=None):
     """)
     for k in ("company_name", "home_region", "default_series_group", "default_expense_category"):
         con.execute("INSERT INTO _bi_config VALUES (?,?)", (k, cfg.get(k, "")))
-    for k in ("internal_doc_types", "internal_doc_name_like", "excluded_series_prefixes"):
+    for k in ("internal_doc_types", "internal_doc_name_like", "excluded_series_prefixes", "service_group_names",
+              "service_item_codes", "product_item_codes", "service_description_like"):
         for v in cfg.get(k, []):
             con.execute("INSERT INTO _bi_config VALUES (?,?)", (k, v))
     for i, g in enumerate(cfg.get("series_groups", [])):
