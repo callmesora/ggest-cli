@@ -16,8 +16,9 @@ def _topics() -> list[str]:
 
 
 @tool(
-    "Read first: business definitions, rules and caveats; topic=<domain> for a domain's tables, codes and traps "
-    "(sales, customers, repairs, finance, stock, operations)."
+    "READ FIRST. Business definitions, rules and caveats (money net of VAT, what is excluded, margin "
+    "method, data date). topic=sales|customers|repairs|finance|stock|operations returns that domain's "
+    "views, codes and traps; read it before writing SQL on that domain."
 )
 def data_dictionary(topic: str | None = None) -> str:
     """Definitions and rules (docs/DATA_DICTIONARY.md), or one domain's notes (docs/domains/<topic>.md)."""
@@ -31,20 +32,31 @@ def data_dictionary(topic: str | None = None) -> str:
 
 
 @tool(
-    "Search the saved-query library (documented SQL for most business questions). Filter by domain folder "
-    "(sales, customers, repairs, finance, stock, management, ...) and/or words in name/description; "
-    "name=<query> shows one query with its SQL."
+    "Find a saved query (139 documented SQL queries covering most business questions) by words and/or "
+    "domain (sales, customers, repairs, finance, stock, operations, management, setup). Returns one line "
+    "per query: name, domain, summary, params with defaults. name=<query> returns its full description "
+    "and SQL; full=true returns full descriptions for the whole list. Then call run_saved_query."
 )
-def saved_queries(domain: str | None = None, search: str | None = None, name: str | None = None) -> Any:
+def saved_queries(
+    domain: str | None = None,
+    search: Annotated[str | None, Field(description="words that must all appear in the name or description")] = None,
+    name: Annotated[str | None, Field(description="one query: full description, params and SQL")] = None,
+    full: bool = False,
+) -> Any:
     """See bi.saved.saved_queries."""
-    return saved.saved_queries(domain, search, name)
+    return saved.saved_queries(domain, search, name, full=full)
 
 
-@tool("Run a saved query by name; params override its defaults (date words allowed).")
+@tool(
+    "Run a saved query by name (find names with saved_queries). params override its defaults and accept "
+    "date words (today, year_start, last_year_start, today_last_year...). Returns columns + rows; when "
+    "more rows exist than limit, truncated=true: never sum a truncated list, raise limit or use a summary"
+    " query."
+)
 def run_saved_query(
-    name: str,
+    name: Annotated[str, Field(description="saved query name, from saved_queries")],
     params: Annotated[dict[str, Any] | None, Field(description='overrides, e.g. {"start": "2025-01-01"}')] = None,
-    limit: int = 500,
+    limit: Annotated[int, Field(description="maximum rows returned")] = 100,
 ) -> Any:
     """Rows of the query; when more rows existed than `limit`: {rows, truncated, note} so nobody sums a cut list."""
     page = saved.run_page(name, params, limit)
@@ -53,7 +65,10 @@ def run_saved_query(
     return page.rows
 
 
-@tool("List business views, or columns + sample rows of one view/table.")
+@tool(
+    "Without name: the business views (query these, not raw gGest tables). With name: the columns of one "
+    "view/table and a sample row. Use before writing SQL with the query tool."
+)
 def describe(name: str | None = None) -> Any:
     """Business views (or one view's columns). Prefer these over raw gGest tables."""
     if not name:
@@ -67,12 +82,14 @@ def describe(name: str | None = None) -> Any:
     if len(visible) < len(cols):
         return {"name": name, "columns": ", ".join(visible),
                 "note": "credential columns hidden; table not queryable as SELECT *"}  # fmt: skip
-    return {"name": name, "columns": ", ".join(cols), "sample": db.rows(f'SELECT * FROM "{name}" LIMIT 2')}
+    return {"name": name, "columns": ", ".join(cols), "sample": db.rows(f'SELECT * FROM "{name}" LIMIT 1')}
 
 
 @tool(
-    "Read-only SQL (single SELECT/WITH) for questions the other tools don't cover. "
-    "Use business views (sales_facts, sales_docs, customers, items, repairs, purchase_docs)."
+    "Last resort when no named tool or saved query fits: one read-only SELECT/WITH statement over the "
+    "business views (sales_facts, sales_docs, customers, customer_dim, items, repairs, purchase_docs, "
+    "receivable_docs...; see describe and data_dictionary). Max limit rows. Credential tables/columns are"
+    " refused."
 )
 def query(sql: str, limit: int = 200) -> dict:
     """Read-only SQL over business views and raw tables. Max `limit` rows."""

@@ -199,6 +199,19 @@ def test_table_from_query_and_cut_results() -> None:
 
 
 def test_query_list() -> None:
-    text = render.query_list([{"name": "q", "domain": "d", "params": {}, "description": "what"}])
+    text = render.query_list([{"name": "q", "domain": "d", "params": "", "summary": "what"}])
     assert "q  [d]" in text
-    assert text.endswith("1 saved queries")
+    assert "    what" in text
+    assert "1 saved queries" in text.splitlines()[-1]
+    assert "full text" in render.query_list([{"name": "q", "domain": "d", "params": {}, "description": "full text"}])
+
+
+def test_compact_turns_records_into_columns_and_rows() -> None:
+    assert render.compact([{"a": 1, "b": 2}, {"a": 3, "c": 4}]) == {
+        "columns": ["a", "b", "c"], "rows": [[1, 2, None], [3, None, 4]]}  # fmt: skip
+    profile = {"name": "x", "sales": [{"year": 2025, "net": 1.0}], "tags": [], "n": 3}
+    assert render.compact(profile) == {"name": "x", "sales": {"columns": ["year", "net"], "rows": [[2025, 1.0]]},
+                                       "tags": [], "n": 3}  # fmt: skip
+    cut = {"rows": [{"y": 1}], "truncated": True, "note": "more"}
+    assert render.compact(cut) == {"columns": ["y"], "rows": [[1]], "truncated": True, "note": "more"}
+    assert render.compact("text") == "text"

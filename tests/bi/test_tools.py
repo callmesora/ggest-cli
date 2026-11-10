@@ -188,13 +188,28 @@ def test_parse_value(text: str, value: Any) -> None:
     assert saved.parse_value(text) == value
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Short one. Then more detail.", "Short one."),
+        ("Sales (gross, i.e. with VAT; per year) and more", "Sales (gross, i.e. with VAT; per year) and more"),
+        ("word " * 40, ("word " * 28).strip() + "…"),
+    ],
+)
+def test_first_sentence(text: str, expected: str) -> None:
+    assert saved.first_sentence(text) == expected
+
+
 def test_parse_and_search(query_dir: Path) -> None:
     q = saved.parse(query_dir / "by_year.sql")
     assert q.params == {"start": "last_year_start", "limit": 10, "factor": 1.5}
     assert q.domain == "sales"
     assert not q.sql.endswith(";")
     assert saved.parse(query_dir / "broken.sql").name == "broken"
-    assert [x["name"] for x in saved.saved_queries(search="per year")] == ["test_sales_by_year"]
+    brief = saved.saved_queries(search="per year")
+    assert brief == [{"name": "test_sales_by_year", "domain": "sales", "summary": "Net sales per year since a date",
+                      "params": "start=last_year_start, limit=10, factor=1.5"}]  # fmt: skip
+    assert saved.saved_queries(search="per year", full=True)[0]["description"] == "Net sales per year since a date"
     assert saved.saved_queries(domain="stock") == []
     assert "SELECT" in saved.saved_queries(name="test_sales_by_year")["sql"]
     with pytest.raises(ValueError, match="unknown saved query"):

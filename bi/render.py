@@ -45,10 +45,36 @@ def table(data: Any) -> str:
 
 
 def query_list(queries: list[dict[str, Any]]) -> str:
-    """Saved queries with full descriptions: agents choose queries from them."""
-    blocks = [f"{q['name']}  [{q['domain']}]  params: {q['params']}\n    {q['description']}\n" for q in queries]
-    return "\n".join([*blocks, f"{len(queries)} saved queries"])
+    """Saved queries, one block each: name, domain, params, then the summary (or the full description)."""
+    blocks = [
+        f"{q['name']}  [{q['domain']}]  params: {q['params']}\n    {q.get('summary') or q.get('description')}\n"
+        for q in queries
+    ]
+    hint = "--name <query> shows one in full; --full shows every description in full"
+    return "\n".join([*blocks, f"{len(queries)} saved queries ({hint})"])
 
 
 def is_truncated(data: Any) -> bool:
     return isinstance(data, dict) and bool(data.get("truncated"))
+
+
+def _is_records(data: Any) -> bool:
+    return isinstance(data, list) and bool(data) and all(isinstance(r, dict) for r in data)
+
+
+def columnar(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """[{a: 1, b: 2}, {a: 3, b: 4}] -> {columns: [a, b], rows: [[1, 2], [3, 4]]}: names once, not on every row."""
+    cols = list(dict.fromkeys(k for r in records for k in r))
+    return {"columns": cols, "rows": [[r.get(c) for c in cols] for r in records]}
+
+
+def compact(data: Any) -> Any:
+    """Token-lean shape for agents: every list of records (also nested, e.g. in a profile) becomes columns + rows;
+    a cut result {rows: [...], truncated, note} keeps its flags next to the columns."""
+    if _is_records(data):
+        return columnar(data)
+    if isinstance(data, dict):
+        if _is_records(data.get("rows")):
+            return {**columnar(data["rows"]), **{k: v for k, v in data.items() if k != "rows"}}
+        return {k: compact(v) for k, v in data.items()}
+    return data

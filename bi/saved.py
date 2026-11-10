@@ -22,6 +22,8 @@ QUERIES = Path(__file__).resolve().parent / "queries"
 _META = re.compile(r"^--\s*(name|description|params|domain):\s*(.*)$", re.MULTILINE)
 _INT = re.compile(r"-?\d+")
 _FLOAT = re.compile(r"-?\d+\.\d+")
+_SENTENCE_END = re.compile(r"(?<=[.?])\s+(?=[A-Z])")
+BRIEF_CHARS = 140
 
 # kept for older imports
 date_words = dates.date_words
@@ -40,6 +42,12 @@ class SavedQuery:
     def summary(self) -> dict[str, Any]:
         return {"name": self.name, "domain": self.domain, "description": self.description, "params": self.params}
 
+    def brief(self) -> dict[str, Any]:
+        """One line per query for listings: the first sentence of the description and the parameter defaults."""
+        params = ", ".join(f"{k}={v}" for k, v in self.params.items())
+        return {"name": self.name, "domain": self.domain, "summary": first_sentence(self.description),
+                "params": params}  # fmt: skip
+
     def matches(self, domain: str | None, words: list[str]) -> bool:
         text = f"{self.name} {self.description}".lower()
         return (not domain or self.domain == domain) and all(w in text for w in words)
@@ -51,6 +59,14 @@ class Page:
 
     rows: list[dict[str, Any]]
     truncated: bool
+
+
+def first_sentence(text: str, limit: int = BRIEF_CHARS) -> str:
+    """First sentence of `text`, cut at a word boundary to at most `limit` characters."""
+    sentence = _SENTENCE_END.split(text, maxsplit=1)[0]
+    if len(sentence) <= limit:
+        return sentence
+    return sentence[:limit].rsplit(" ", 1)[0].rstrip(",;:") + "…"
 
 
 def parse_value(text: str) -> Any:
@@ -97,14 +113,17 @@ def get(name: str) -> SavedQuery:
     return query
 
 
-def saved_queries(domain: str | None = None, search: str | None = None, name: str | None = None) -> Any:
-    """List saved queries (name, domain, description, params) filtered by domain and/or words in the name or
-    description; `name` returns one query in full, with its SQL."""
+def saved_queries(
+    domain: str | None = None, search: str | None = None, name: str | None = None, *, full: bool = False
+) -> Any:
+    """Saved queries filtered by domain and/or words in the name or description: one line each (name, domain,
+    summary, params), or the whole description with `full`. `name` returns one query in full, with its SQL."""
     if name:
         query = get(name)
         return {**query.summary(), "sql": query.sql}
     words = (search or "").lower().split()
-    return [q.summary() for q in catalog().values() if q.matches(domain, words)]
+    found = [q for q in catalog().values() if q.matches(domain, words)]
+    return [q.summary() if full else q.brief() for q in found]
 
 
 def _round(value: Any) -> Any:

@@ -16,8 +16,10 @@ Run everything from the project root. Read-only: nothing here can change gGest.
 1. A named tool: `uv run ggest list` (kpis, year_over_year, top_products, top_customers, customer_profile,
    product_profile, repairs_breakdown, ...). Add `--json` when you will post-process.
 2. A saved query: `uv run ggest saved_queries --search "<words>"` (or `--domain sales|customers|repairs|finance|stock|operations|management|setup`),
-   then `uv run ggest run_saved_query --name <name> --params '{"start": "2024-01-01"}'`. Read the description: it
-   states the rules and caveats of the numbers.
+   which lists one line per query (name, summary, params). Read the chosen query's full description before
+   quoting its numbers — it states their rules and caveats: `uv run ggest saved_queries --name <name>`. Then
+   `uv run ggest run_saved_query --name <name> --params '{"start": "2024-01-01"}'` (100 rows by default; a NOTE
+   says when the list was cut: raise `--limit` before totalling).
 3. Ad-hoc SQL on the business views: `uv run ggest query --sql "SELECT ..."` (one SELECT/WITH, 200-row cap).
    `uv run ggest describe --name <view or table>` lists columns. Prefer views (sales_facts, sales_docs, customers,
    items, repairs, purchase_docs, ...) over raw gGest tables.

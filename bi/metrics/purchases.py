@@ -8,7 +8,10 @@ from ._sql import clean, rnd, where
 from .sales import sales_over_time
 
 
-@tool("Net purchases per supplier.")
+@tool(
+    "Net purchases per supplier in a period (credit notes negative, cancelled excluded), biggest first: "
+    "supplier_code, supplier, net_purchases, documents, last_purchase."
+)
 def purchases_by_supplier(start: DateArg = None, end: DateArg = None, limit: LimitArg = 20) -> list[dict]:
     """Net purchases per supplier (credit notes negative, cancelled excluded)."""
     w, p = where(start, end, ["is_cancelled = 0"])
@@ -22,7 +25,10 @@ def purchases_by_supplier(start: DateArg = None, end: DateArg = None, limit: Lim
     )
 
 
-@tool("Purchases vs sales per year or month.")
+@tool(
+    "Purchases vs sales per year or month: net_sales, gross_margin, margin_pct and net_purchases per "
+    "period (a cash view of stock investment)."
+)
 def purchases_vs_sales(
     period: Literal["year", "month"] = "year", start: DateArg = None, end: DateArg = None
 ) -> list[dict]:

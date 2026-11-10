@@ -1,6 +1,8 @@
 """Customer tools: rankings, concentration, one customer's profile, win-back list."""
 
-from typing import Literal
+from typing import Annotated, Literal
+
+from pydantic import Field
 
 from .. import db
 from ..registry import DateArg, LimitArg, tool
@@ -11,8 +13,11 @@ _NOT_WALK_IN = "customer_code NOT IN (SELECT customer_code FROM customers WHERE 
 
 
 @tool(
-    "Customers (per customer code) ranked by net sales, margin or invoices; optional segment filter. "
-    "For legal entities merged by NIF use saved query customers_top_entities."
+    "Rank customers by net sales, gross margin or invoice count in a period. Returns customer_code, "
+    "customer, net_sales, gross_margin, margin_pct, invoices, first/last_purchase, repair orders. Walk-in"
+    " customers excluded unless include_walk_in. segment filters publico|empresa|particular|associativo. "
+    "One row per gGest customer code; for companies with several codes merged by NIF use run_saved_query "
+    "customers_top_entities."
 )
 def top_customers(
     start: DateArg = None,
@@ -46,7 +51,10 @@ def top_customers(
     )
 
 
-@tool("Share of sales from the top 1/10/20/50/100 customers.")
+@tool(
+    "How dependent sales are on the biggest customers in a period: number of customers, net sales and the"
+    " share (%) of sales from the top 1, 10, 20, 50 and 100."
+)
 def customer_concentration(start: DateArg = None, end: DateArg = None) -> dict:
     """How dependent sales are on top customers."""
     w, p = where(start, end)
@@ -59,8 +67,14 @@ def customer_concentration(start: DateArg = None, end: DateArg = None) -> dict:
     return out
 
 
-@tool("Full profile of one customer by code, NIF or part of the name.")
-def customer_profile(query: str, limit_items: int = 15) -> dict:
+@tool(
+    "Everything about ONE customer, found by customer code, NIF or part of the name: contact card, "
+    "sales/margin/invoices per year, top items bought and repair history. Several matches return "
+    "{ambiguous: [...]}: call again with the customer_code."
+)
+def customer_profile(
+    query: Annotated[str, Field(description="customer code, NIF or part of the name")], limit_items: int = 15
+) -> dict:
     """Everything about one customer: totals per year, top items, repairs."""
     matches = db.rows("""SELECT customer_code, name, nif, email, phone, opened_on, is_walk_in FROM customers
                          WHERE customer_code = ? OR lower(name) LIKE lower(?) OR nif = ? LIMIT 10""",
@@ -100,7 +114,10 @@ def customer_profile(query: str, limit_items: int = 15) -> dict:
     return customer
 
 
-@tool("Valuable customers who stopped buying (win-back list).")
+@tool(
+    "Win-back list: customers with at least min_net net sales (all time) and no purchase for "
+    "inactive_days, biggest first. Returns customer_code, customer, net_sales, last_purchase, days_since."
+)
 def dormant_customers(min_net: float = 500, inactive_days: int = 365, limit: LimitArg = 30) -> list[dict]:
     """Good customers (net sales >= min_net all-time) who haven't bought for `inactive_days`."""
     return clean(db.rows(f"""

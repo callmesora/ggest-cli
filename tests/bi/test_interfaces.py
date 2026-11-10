@@ -127,6 +127,10 @@ def test_mcp_lists_every_tool_read_only(fake_db: Path) -> None:
 def test_mcp_call_and_errors(fake_db: Path) -> None:
     ok = _mcp(lambda c: c.call_tool("kpis", {"start": "year_start", "end": "today"}))
     assert json.loads(ok.content[0].text)["net_sales"] == 1050.0
+    table = _mcp(lambda c: c.call_tool("top_products", {"limit": 2}))
+    out = json.loads(table.content[0].text)
+    assert out["columns"][0] == "item_code"
+    assert out["rows"][0][0] == "PC1"
     refused = _mcp(lambda c: c.call_tool("query", {"sql": "SELECT * FROM utilizadores"}, raise_on_error=False))
     assert refused.is_error
     assert "password" in refused.content[0].text

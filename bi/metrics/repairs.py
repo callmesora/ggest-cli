@@ -19,7 +19,10 @@ _BREAKDOWN = {
 }
 
 
-@tool("Repair orders (assistências) opened per year or month, with how many are not closed.")
+@tool(
+    "Repair orders (assistências) opened per year or month: repairs, not_closed, customers. Volume only; "
+    "for money from repairs use repair_revenue."
+)
 def repairs_over_time(
     period: Literal["year", "month"] = "year", start: DateArg = None, end: DateArg = None
 ) -> list[dict]:
@@ -33,7 +36,10 @@ def repairs_over_time(
     )
 
 
-@tool("Repairs by equipment type, brand, technician or status.")
+@tool(
+    "Repair orders in a period grouped by equipment type, brand, technician or status, with count and "
+    "share %. Technician is only recorded until ~2021."
+)
 def repairs_breakdown(
     by: Literal["equipment", "brand", "technician", "status"] = "equipment",
     start: DateArg = None,
@@ -50,7 +56,10 @@ def repairs_breakdown(
     )
 
 
-@tool("Days to close repairs, per year.")
+@tool(
+    "Days from opening to closing repairs, per year: closed_repairs, avg_days, within_1_day, "
+    "within_7_days. Closing dates exist mainly 2011-2019."
+)
 def repair_turnaround(start: DateArg = None, end: DateArg = None) -> list[dict]:
     """Days from opening to closing a repair (closed repairs with a real closing date), per year."""
     w, p = where(start, end, ["closed_at IS NOT NULL", "closed_at >= opened_on"], date_col="opened_on")
@@ -66,7 +75,10 @@ def repair_turnaround(start: DateArg = None, end: DateArg = None) -> list[dict]:
     )
 
 
-@tool("Service (labour) revenue vs repairs opened.")
+@tool(
+    "Service (labour) revenue per period vs repair orders opened: service_net, billed_from_repair_orders "
+    "(invoices converted from a repair order, linked from 2024), repairs_opened."
+)
 def repair_revenue(
     period: Literal["year", "quarter", "month"] = "year", start: DateArg = None, end: DateArg = None
 ) -> list[dict]:
@@ -85,7 +97,11 @@ def repair_revenue(
     return clean(services)
 
 
-@tool("What breaks most: reported faults grouped into categories (no raw text). grain=total|year.")
+@tool(
+    "What breaks most: reported repair faults grouped into categories by keyword rules, total or per "
+    "year, optionally for one equipment group. Never returns the raw fault text (it can hold customer "
+    "passwords)."
+)
 def common_faults(
     start: DateArg = None,
     end: DateArg = None,

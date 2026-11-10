@@ -1,6 +1,8 @@
 """Sales tools: totals over time, KPIs, products, categories, growth, weekday/hour pattern."""
 
-from typing import Literal
+from typing import Annotated, Literal
+
+from pydantic import Field
 
 from .. import dates, db
 from ..registry import DateArg, LimitArg, tool
@@ -11,7 +13,10 @@ WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 Period = Literal["year", "quarter", "month", "day"]
 
 
-@tool("Net sales/margin/documents/customers per year, quarter, month or day.")
+@tool(
+    "Net sales, gross margin, margin_pct, documents, customers, products_net and services_net per year, "
+    "quarter, month or day. Prefer period=year or a date range: all months since 2017 is ~120 rows."
+)
 def sales_over_time(period: Period = "month", start: DateArg = None, end: DateArg = None) -> list[dict]:
     """Net sales, gross margin, margin %, invoices and distinct customers per period."""
     w, p = where(start, end)
@@ -29,7 +34,11 @@ def sales_over_time(period: Period = "month", start: DateArg = None, end: DateAr
     )
 
 
-@tool("Headline KPIs for a period (net sales, gross margin, invoices, customers, avg invoice, repairs).")
+@tool(
+    "Headline numbers for one period: net_sales, gross_margin, margin_pct, invoices, customers, "
+    "avg_invoice_net, repairs_opened. For this year vs last year use run_saved_query "
+    "management_kpi_snapshot."
+)
 def kpis(start: DateArg = None, end: DateArg = None) -> dict:
     """Headline numbers for a period: sales, margin, invoices, customers, average ticket, repairs."""
     w, p = where(start, end)
@@ -48,7 +57,11 @@ def kpis(start: DateArg = None, end: DateArg = None) -> dict:
     return {k: rnd(v) for k, v in s.items()}
 
 
-@tool("Best-selling items by net sales, margin or quantity.")
+@tool(
+    "Best items in a period by net sales, gross margin or quantity, optionally only product, service or "
+    "fee lines: item_code, description, family, brand, qty, net_sales, gross_margin, margin_pct, "
+    "customers."
+)
 def top_products(
     start: DateArg = None,
     end: DateArg = None,
@@ -75,7 +88,10 @@ def top_products(
     )
 
 
-@tool("Sales and margin by product group, family, brand or kind.")
+@tool(
+    "Net sales, gross margin, margin_pct, qty and share % by product group, family, brand or line kind "
+    "(product/service/fee) in a period."
+)
 def sales_by_category(
     level: Literal["group", "family", "brand", "kind"] = "family",
     start: DateArg = None,
@@ -113,7 +129,10 @@ def _with_growth(rows: list[dict]) -> list[dict]:
     return rows
 
 
-@tool("Annual net sales, margin and growth vs previous year (the partial current year vs the same days last year).")
+@tool(
+    "Net sales and margin per year with growth % vs the previous year. The current (partial) year is "
+    "compared with the same days of last year (see basis). Start here for 'how is the business doing'."
+)
 def year_over_year(start_year: int | None = None, end_year: int | None = None) -> list[dict]:
     """Annual net sales, margin and growth vs the previous year."""
     lo, hi = start_year or 0, end_year or 9999
@@ -127,8 +146,12 @@ def year_over_year(start_year: int | None = None, end_year: int | None = None) -
     return rows
 
 
-@tool("Full profile of one item by code or part of the description.")
-def product_profile(query: str) -> dict:
+@tool(
+    "Everything about ONE item, found by item code or part of the description: catalogue data (price, "
+    "last purchase price, supplier, stock), sales per year and top customers. Several matches return "
+    "{ambiguous: [...]}."
+)
+def product_profile(query: Annotated[str, Field(description="item code or part of the description")]) -> dict:
     """One item: catalogue data, sales per year, top customers."""
     matches = db.rows(
         """SELECT item_code, description, kind, family_name, brand_name, price_net, last_purchase_price,
@@ -159,7 +182,7 @@ def product_profile(query: str) -> dict:
     return item
 
 
-@tool("Invoices and sales by weekday and hour.")
+@tool("When the shop sells: invoices and net sales by weekday (0=Sun) and hour of day in a period.")
 def sales_by_weekday_hour(start: DateArg = None, end: DateArg = None) -> list[dict]:
     """When the shop sells: invoices and net sales by weekday and hour of day."""
     w, p = where(start, end, ["is_cancelled = 0", "is_internal = 0", "doc_class = 'invoice'"])

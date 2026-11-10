@@ -9,6 +9,7 @@ All tools are read-only. Amounts are net of VAT (EUR); the `data_dictionary` too
 """
 
 import functools
+import inspect
 import sqlite3
 from importlib.metadata import version
 from pathlib import Path
@@ -20,7 +21,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools import Tool as McpTool
 from mcp.types import ToolAnnotations
 
-from . import db
+from . import db, render
 from .metrics import TOOLS  # importing bi.metrics registers every tool
 from .registry import Tool
 
@@ -29,20 +30,25 @@ INSTRUCTIONS = (
     "(assistências), purchases, stock, receivables and expenses. Money is EUR net of VAT; credit notes are negative; "
     "cancelled and internal documents are excluded. Start with run_saved_query management_kpi_snapshot (it gives the "
     "data date: 'today' in queries means that date) and data_dictionary. Prefer named tools, then saved_queries "
-    "(search by words), then `query` (read-only SQL on the business views). Quote periods and caveats in answers."
+    "(search by words), then `query` (read-only SQL on the business views). Tables come back as {columns, rows}; "
+    "truncated=true means the list was cut at `limit`, so never total it. Quote periods and caveats in answers."
 )
 READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
 
 
 def as_mcp_tool(t: Tool) -> McpTool:
-    """Wrap a registry tool: same signature and schema, date words resolved before the call."""
+    """Wrap a registry tool: same parameters and schema, date words resolved before the call, compact output."""
 
     @functools.wraps(t.fn)
     def run(**kwargs: Any) -> Any:
         try:
-            return t.call(**kwargs)
+            return render.compact(t.call(**kwargs))
         except (ValueError, sqlite3.Error) as e:  # the agent's request was wrong: tell it why, no traceback
             raise ToolError(str(e)) from e
+
+    # the compact output no longer matches the function's declared return type
+    run.__signature__ = inspect.signature(t.fn).replace(return_annotation=Any)  # type: ignore[attr-defined]
+    run.__annotations__ = {**t.fn.__annotations__, "return": Any}
 
     return McpTool.from_function(run, name=t.name, description=t.description, annotations=READ_ONLY,
                                  output_schema=None)  # fmt: skip
