@@ -71,3 +71,9 @@ NIF rules come first. Sole traders with NIF 1–2 count as `particular` unless g
 - Repair counts differ by scope: per record vs per NIF entity (`entity_key`), all time vs the query period. Column
   names say which (`repairs_all_time_record`, `repairs_in_period_entity`, `repairs_all_time_entity`).
 - `Clientes.obs` (alert note) is returned by `customers_briefing` only with `show_alert_note=1`.
+
+## customer_regions
+One row per customer: postal_prefix (4 digits), postal_code (NNNN-NNN), postal_locality (from `codpostal`),
+region and area, from the rules in the database's ggest.json (`regions`, `areas`; defaults: Portugal by postcode).
+Records with only a 4-digit postcode or a town name get the region but no finer area (or the region's
+`unknown_area` label). Used by `customers_geography` (level=region|area) and `customers_segment_lookup`.

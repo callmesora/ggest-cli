@@ -20,7 +20,7 @@ Run from the project root (bash quoting; in PowerShell 5.1 escape inner quotes a
 5. Alternatives in stock (same family): `uv run ggest query --sql "SELECT item_code, description, price_net, stock_qty FROM items WHERE family_name = 'MINI PC' AND stock_qty > 0 ORDER BY price_net"`.
 
 ## Reading the numbers
-- `price_net` is the catalogue price **without VAT**; price with VAT = `price_gross` (Azores VAT, 16 % now).
+- `price_net` is the catalogue price **without VAT**; price with VAT = `price_gross` (at the VAT rate of the company's region).
 - Margin at catalogue price = (price_net − last_purchase_price) / price_net. Sales-line cost is the average cost
   (pmc) at sale time; `cost_source` ≠ pmc means estimated.
 - Items bought per box and sold per unit, or with an old corrupted average cost, show absurd margins: say so.

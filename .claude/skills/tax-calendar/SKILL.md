@@ -26,7 +26,7 @@ Run from the project root.
 ## Rules and traps
 - VAT figures are **indicative** (built from gGest documents): reverse charge on intra-EU purchases (regime
   `int`/`aut`) is not self-assessed and costs not registered in gGest are missing. The accountant files the return.
-- Azores rates are lower than the mainland (e.g. 16 % vs 23 % on mainland supplier invoices): a small or
+- Regional rates can differ (e.g. Azores 16 % on sales vs 23 % on mainland supplier invoices): a small or
   negative NET is common and means VAT to recover.
 - "Done" comes from gGest's generated-obligations table, which is often not maintained: present
   past_due_not_marked_done as "confirmar se foi feito", not as a missed deadline.

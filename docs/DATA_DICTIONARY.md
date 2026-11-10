@@ -9,8 +9,8 @@ every gGest database, the company-specific meaning lives in `ggest.json` (see Co
   domain). Query the views; use raw tables only for details the views lack.
 - **Data date**: the last document date in the snapshot. `today` in saved queries means this date
   (`management_kpi_snapshot` shows it). Compare like-for-like periods; the current year is partial.
-- Money: EUR, **net of VAT** unless a column says `gross`/`vat`. Azores VAT rates (18%/16%) appear on sales,
-  23% on mainland supplier invoices.
+- Money: EUR, **net of VAT** unless a column says `gross`/`vat`. VAT rates follow the company's fiscal region
+  (e.g. Azores 16%/18% on sales, 23% on mainland supplier invoices).
 - Rules applied in the views: cancelled documents (`estado_doc = 1`, with `cancel_reason`) excluded from
   `sales_facts`; credit notes negative; internal documents (`is_internal`: internal consumption, sponsorship, and
   the types/series listed in the config, e.g. the sale of a company vehicle) excluded from `sales_facts`.
@@ -25,12 +25,17 @@ in `bi/config.example.json`. It is copied into `_bi_config`, `_bi_series_groups`
   `sales_series_groups_by_year`.
 - `expense_rules`: overhead categories by creditor code/name/document text → `expense_docs`,
   `finance_operating_expenses_by_category`, `finance_profit_and_loss_by_year`.
+- `regions`, `areas`, `no_address_label`, `other_region_label`: where customers are → view `customer_regions`
+  (region and area per customer from postcode ranges, address words and gGest's postcode table `codpostal`),
+  `customers_geography`, `customers_segment_lookup`. Defaults: Portugal split into Continente / Madeira / Açores by
+  postcode, areas = `codpostal` localities. Add islands, districts or sales territories in ggest.json.
 - `setup_*` saved queries show what the config currently does (skill `new-database-setup`).
 
 ## Domain views (details: `uv run ggest data_dictionary --topic <domain>` = `docs/domains/<domain>.md`)
 - **sales**: `quote_docs`, `quote_lines`, `quote_outcomes` (quotes/pro-formas/orders and whether they became
   invoices), `delivery_notes`, `online_items`.
-- **customers**: `customer_dim` (segment, NIF check, contact-presence flags — no contact values),
+- **customers**: `customer_dim` (segment, NIF check, contact-presence flags — no contact values), `customer_regions`
+  (region and area per customer, from the config),
   `customer_activity` (every interaction, last contact), `customer_appointments`.
 - **repairs**: `serial_history`, `serial_registry` (serial numbers, warranty terms and end dates),
   `repair_warranty` (was the device sold here, in warranty at opening), `repair_rmas`, `repair_models`.

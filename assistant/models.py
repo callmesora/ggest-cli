@@ -14,14 +14,26 @@ class Model:
 
 
 MODELS = (
-    Model("deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash", "DeepSeek", "Recommended: newest DeepSeek, almost free ($0.006 / $0.50)"),
-    Model("deepseek/deepseek-v4-pro-0813", "DeepSeek V4 Pro", "DeepSeek", "Stronger reasoning for hard questions ($0.11 / $4.44)"),
+    Model(
+        "deepseek/deepseek-v4.1-flash",
+        "DeepSeek V4.1 Flash",
+        "DeepSeek",
+        "Recommended: newest DeepSeek, almost free ($0.006 / $0.50)",
+    ),
+    Model(
+        "deepseek/deepseek-v4-pro-0813",
+        "DeepSeek V4 Pro",
+        "DeepSeek",
+        "Stronger reasoning for hard questions ($0.11 / $4.44)",
+    ),
     Model("qwen/qwen3.8-flash", "Qwen 3.8 Flash", "Alibaba", "Fast and cheap ($0.15 / $0.47)"),
     Model("z-ai/glm-5.3", "GLM 5.3", "Zhipu", "Zhipu's full model, cheap input ($0.07 / $1.40)"),
     Model("minimax/minimax-m3.1-flash", "MiniMax M3.1 Flash", "MiniMax", "Newest MiniMax, low cost ($0.15 / $0.60)"),
     Model("xiaomi/mimo-v2.6-pro", "MiMo V2.6 Pro", "Xiaomi", "Xiaomi's pro tier ($0.44 / $0.87)"),
     Model("anthropic/claude-haiku-5.5", "Claude Haiku 5.5", "Anthropic", "Reliable and cheap ($0.10 / $0.50)"),
-    Model("anthropic/claude-sonnet-5.5", "Claude Sonnet 5.5", "Anthropic", "Best answers when quality matters ($2 / $10)"),
+    Model(
+        "anthropic/claude-sonnet-5.5", "Claude Sonnet 5.5", "Anthropic", "Best answers when quality matters ($2 / $10)"
+    ),
 )
 DEFAULT_MODEL = MODELS[0].id
 

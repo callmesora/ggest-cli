@@ -182,7 +182,7 @@ def rfm_facts(_ctx: Context) -> list[Row]:
 
 def geography_facts(_ctx: Context) -> list[Row]:
     """Share of sales of the two main islands."""
-    geo = by_key(run("customers_geography", {"level": "island"}), "island")
+    geo = by_key(run("customers_geography", {"level": "region"}), "region")
     src = "customers_geography"
     return [
         fact("faial_share", geo["Faial"]["share_pct"], "pct", "Peso do Faial nas vendas desde 2017", src),

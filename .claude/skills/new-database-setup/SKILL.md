@@ -18,7 +18,11 @@ description: Bring another gGest database into the toolkit — export it to SQLi
   (`series_groups`) or not trading at all (`excluded_series_prefixes`, e.g. selling a company car).
 - `uv run ggest --db <db> run_saved_query --name setup_expense_creditors` — biggest creditors and the category they
   get; add `expense_rules` (by creditor code, name or text) until the top ~30 by value are classified.
-- Customer regions: postal-code ranges / localities of the shop's home area → `regions`.
+- Customer regions: `uv run ggest --db <db> run_saved_query --name customers_geography --params level=region`.
+  Defaults split Portugal into Continente / Madeira / Açores by postcode. If the company's market is one
+  island, district or set of towns, add `regions` (postcode ranges, address words) and finer `areas`
+  (postcode ranges, address words, or `postal_names` from gGest's `codpostal`) so the top ~90% of sales
+  land in a meaningful region; check `level=area` afterwards.
 Ask the user to confirm anything that is a business judgement (is this series a separate unit?).
 
 ## 3. Write the config

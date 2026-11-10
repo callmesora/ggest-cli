@@ -27,5 +27,14 @@
     {"category": "Bank and payment fees", "name_like": ["%banco%", "%caixa%", "%ifthenpay%", "%easypay%", "%sibs%"]},
     {"category": "Postage", "name_like": ["%ctt%"]}
   ],
-  "regions": []
+  "_regions": "customer regions (view customer_regions): first rule whose 4-digit postcode range matches; for customers without a postcode, first rule whose address text matches locality_like (SQL LIKE on ' lower-case text '). Defaults: Portugal by postcode. unknown_area: area label when nothing finer is known",
+  "regions": [
+    {"region": "Continente", "postal_ranges": [[1000, 8999]]},
+    {"region": "Madeira", "postal_ranges": [[9000, 9399]]},
+    {"region": "Açores", "postal_ranges": [[9500, 9999]]}
+  ],
+  "_areas": "finer areas inside regions, in priority order: a postcode range match first, then address words (customers without a postcode or with one in the area's region), then postal_names (the locality name in gGest's postcode table codpostal); otherwise the codpostal locality name itself",
+  "areas": [],
+  "no_address_label": "Sem morada",
+  "other_region_label": "Outro/estrangeiro"
 }

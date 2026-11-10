@@ -94,10 +94,13 @@ def test_repairs_work_faults_payments(fake, ctx) -> None:
 
 def test_simple_more_datasets(fake, ctx) -> None:
     fake.saved["customers_rfm_summary"] = [{"rfm_label": "1 Campeões", "customers": 3}]
-    fake.saved["customers_geography"] = [{"island": "A", "net_sales": 0}, {"island": "B", "net_sales": 2.0}]
+    fake.saved["customers_geography"] = [
+        {"region": "A", "area": None, "net_sales": 0},
+        {"region": "B", "area": None, "net_sales": 2.0},
+    ]
     fake.saved["sales_credit_cancel_reasons"] = [{"kind": "cancelled"}, {"kind": "credit"}]
     assert build(m1, "rfm_summary")(ctx) == [{"rfm_label": "1 Campeões", "customers": 3, "segment": "Campeões"}]
-    assert build(m1, "geography_islands")(ctx) == [{"island": "B", "net_sales": 2.0}]
+    assert build(m1, "geography_islands")(ctx) == [{"island": "B", "locality": None, "net_sales": 2.0}]
     assert build(m1, "credit_reasons")(ctx) == [{"kind": "credit"}]
 
 

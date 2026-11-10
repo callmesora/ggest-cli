@@ -18,7 +18,7 @@ Run from the project root. Money net of VAT; current year is partial → compare
    retention: `uv run ggest run_saved_query --name customers_cohort_retention --params '{"segment":"particular"}'`
 6. **Relationship base incl. workshop**: `uv run ggest run_saved_query --name customers_relationship_base_by_year`
    and repair → purchase conversion: `uv run ggest run_saved_query --name customers_repair_first_conversion`
-7. **Geography**: `uv run ggest run_saved_query --name customers_geography --params '{"level":"island"}'` (or `locality`).
+7. **Geography**: `uv run ggest run_saved_query --name customers_geography --params '{"level":"region"}'` (or `area`). Regions and areas come from the database's `ggest.json` (view `customer_regions`).
 8. **RFM picture**: `uv run ggest run_saved_query --name customers_rfm_summary`
 
 ## Interpreting
@@ -28,7 +28,7 @@ Run from the project root. Money net of VAT; current year is partial → compare
 - Concentration and value bands work at entity level (NIF): departments of the same public body count as one.
 - 2017 = first year of sales data, so all its buyers look "new"; cohorts are reliable from 2018.
 - `repair_only` customers and the repair→purchase conversion measure the workshop as a door to sales.
-- Geography comes from postal code / address text; many Faial records have only "9900 Horta" (parish unknown).
+- Geography comes from postal code / address text; records with only a 4-digit postcode or a town name get no finer area.
 
 ## Output (Portuguese)
 5–8 bullet conclusions with numbers (share %, margin %, trend vs previous year or same period), then one or two

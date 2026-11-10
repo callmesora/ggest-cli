@@ -2,6 +2,7 @@
 
 import datetime as dt
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -91,8 +92,55 @@ def test_expense_rule_any_and_all() -> None:
 def test_series_and_region_rows() -> None:
     assert config.series_rows([{"group": "Corner", "prefixes": ["CH", "CX"]}]) == [(0, "CH", "Corner"),
                                                                                    (0, "CX", "Corner")]  # fmt: skip
-    regions = [{"region": "Home", "postal_ranges": [[9900, 9904]], "locality_like": ["%town%"]}]
-    assert config.region_rows(regions) == [(0, "Home", 9900, 9904, None), (0, "Home", None, None, "%town%")]
+    regions = [{"region": "Home", "postal_ranges": [[9900, 9904]], "locality_like": ["%town%"], "unknown_area": "?"},
+               {"region": "Label only"}]  # fmt: skip
+    assert config.region_rows(regions) == [(0, "Home", 9900, 9904, None, "?"), (0, "Home", None, None, "%town%", "?"),
+                                           (1, "Label only", None, None, None, None)]  # fmt: skip
+    areas = [{"area": "North", "region": "Home", "postal_ranges": [[9901, 9901]], "locality_like": ["%north%"],
+              "postal_names": ["NORTH TOWN"]}]  # fmt: skip
+    assert config.area_rows(areas) == [(0, "North", "Home", 9901, 9901, None, None),
+                                       (0, "North", "Home", None, None, "%north%", None),
+                                       (0, "North", "Home", None, None, None, "NORTH TOWN")]  # fmt: skip
+
+
+REGIONS_SQL = (db.SQL_DIR / "ext" / "customers.sql").read_text(encoding="utf-8").split(
+    "DROP VIEW IF EXISTS customer_regions;")[1]  # fmt: skip
+
+
+def test_customer_regions_view(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every rule of the region/area view on made-up customers (fake towns and postcodes)."""
+    own = tmp_path / "own.json"
+    own.write_text(json.dumps({
+        "regions": [{"region": "Isle", "postal_ranges": [[9900, 9904]], "locality_like": ["%isletown%"],
+                     "unknown_area": "Isle (area n/d)"},
+                    {"region": "Mainland", "postal_ranges": [[1000, 8999]]}],
+        "areas": [{"area": "Harbour", "region": "Isle", "postal_ranges": [[9901, 9901]]},
+                  {"area": "Hills", "region": "Isle", "locality_like": ["%hills%"]},
+                  {"area": "Old Town", "region": "Isle", "postal_names": ["OLDTOWN"]}],
+        "no_address_label": "No address", "other_region_label": "Abroad"}), encoding="utf-8")  # fmt: skip
+    monkeypatch.setenv("GGEST_CONFIG", str(own))
+    con = sqlite3.connect(tmp_path / "g.sqlite")
+    con.executescript("""CREATE TABLE customers (customer_code TEXT, postal_code TEXT, address TEXT, address2 TEXT);
+                         CREATE TABLE codpostal (Codigo TEXT);""")  # fmt: skip
+    con.executemany("INSERT INTO codpostal VALUES (?)", [("9900-100 OLDTOWN",), ("1200-300 BIGCITY",)])
+    con.executemany("INSERT INTO customers VALUES (?,?,?,?)", [
+        ("harbour", "9901-001", "Quay 1", ""),          # area by postcode range
+        ("hills", "9902-050", "Rua das Hills 3", ""),    # area by address words, postcode inside the region
+        ("old", "9900-100", "Rua A", ""),                # area by codpostal name mapping
+        ("city", "1200300", "Avenida B", ""),            # region by postcode, area = raw codpostal locality
+        ("nopc", "", "Lugar de Isletown", ""),           # region by address words, no area -> unknown_area
+        ("empty", "", "", ""),                           # nothing at all
+        ("abroad", "SW1A 1AA", "London", ""),            # foreign postcode: no rule matches
+    ])  # fmt: skip
+    config.apply(con)
+    con.executescript("CREATE VIEW customer_regions AS" + REGIONS_SQL.split("CREATE VIEW customer_regions AS", 1)[1])
+    got = {r[0]: (r[1], r[2]) for r in con.execute("SELECT customer_code, region, area FROM customer_regions")}
+    con.close()
+    assert got == {
+        "harbour": ("Isle", "Harbour"), "hills": ("Isle", "Hills"), "old": ("Isle", "Old Town"),
+        "city": ("Mainland", "BIGCITY"), "nopc": ("Isle", "Isle (area n/d)"), "empty": ("No address", None),
+        "abroad": ("Abroad", None),
+    }  # fmt: skip
 
 
 def test_apply_writes_defaults_and_overrides(fake_db: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

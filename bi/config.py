@@ -17,7 +17,10 @@ from . import db
 
 HERE = Path(__file__).resolve().parent
 DEFAULT = HERE / "config.default.json"
-SCALAR_KEYS = ("company_name", "home_region", "default_series_group", "default_expense_category")
+SCALAR_KEYS = (
+    "company_name", "home_region", "default_series_group", "default_expense_category", "no_address_label",
+    "other_region_label",
+)  # fmt: skip
 LIST_KEYS = (
     "internal_doc_types", "internal_doc_name_like", "excluded_series_prefixes", "service_group_names",
     "service_item_codes", "product_item_codes", "service_description_like",
@@ -30,7 +33,11 @@ SCHEMA = """
     DROP TABLE IF EXISTS _bi_expense_rules;
     CREATE TABLE _bi_expense_rules (priority INT, category TEXT, code TEXT, name_like TEXT, text_like TEXT);
     DROP TABLE IF EXISTS _bi_regions;
-    CREATE TABLE _bi_regions (priority INT, region TEXT, postal_from INT, postal_to INT, locality_like TEXT);
+    CREATE TABLE _bi_regions (priority INT, region TEXT, postal_from INT, postal_to INT, locality_like TEXT,
+                              unknown_area TEXT);
+    DROP TABLE IF EXISTS _bi_areas;
+    CREATE TABLE _bi_areas (priority INT, area TEXT, region TEXT, postal_from INT, postal_to INT, locality_like TEXT,
+                            postal_name TEXT);
 """
 
 Row = tuple[Any, ...]
@@ -79,15 +86,31 @@ def expense_rows(rules: Iterable[dict[str, Any]]) -> list[Row]:
 
 
 def region_rows(regions: Iterable[dict[str, Any]]) -> list[Row]:
+    """(priority, region, postal_from, postal_to, locality_like, unknown_area) per postcode range or address word."""
     out: list[Row] = []
-    for i, region in enumerate(regions):
-        out += [(i, region["region"], lo, hi, None) for lo, hi in region.get("postal_ranges", [])]
-        out += [(i, region["region"], None, None, like) for like in region.get("locality_like", [])]
+    for i, r in enumerate(regions):
+        name, unknown = r["region"], r.get("unknown_area")
+        out += [(i, name, lo, hi, None, unknown) for lo, hi in r.get("postal_ranges", [])]
+        out += [(i, name, None, None, like, unknown) for like in r.get("locality_like", [])]
+        if not r.get("postal_ranges") and not r.get("locality_like"):
+            out.append((i, name, None, None, None, unknown))  # still known, e.g. for its unknown_area label
+    return out
+
+
+def area_rows(areas: Iterable[dict[str, Any]]) -> list[Row]:
+    """(priority, area, region, postal_from, postal_to, locality_like, postal_name) per condition of each area."""
+    out: list[Row] = []
+    for i, a in enumerate(areas):
+        name, region = a["area"], a.get("region")
+        out += [(i, name, region, lo, hi, None, None) for lo, hi in a.get("postal_ranges", [])]
+        out += [(i, name, region, None, None, like, None) for like in a.get("locality_like", [])]
+        out += [(i, name, region, None, None, None, pn) for pn in a.get("postal_names", [])]
     return out
 
 
 def apply(con: sqlite3.Connection | None = None) -> dict[str, str]:
-    """Write the settings into the database (_bi_config, _bi_series_groups, _bi_expense_rules, _bi_regions)."""
+    """Write the settings into the database (_bi_config, _bi_series_groups, _bi_expense_rules, _bi_regions,
+    _bi_areas)."""
     cfg = load()
     own = con is None
     con = con or db.connect(read_only=False)
@@ -96,7 +119,8 @@ def apply(con: sqlite3.Connection | None = None) -> dict[str, str]:
         con.executemany("INSERT INTO _bi_config VALUES (?,?)", config_rows(cfg))
         con.executemany("INSERT INTO _bi_series_groups VALUES (?,?,?)", series_rows(cfg.get("series_groups", [])))
         con.executemany("INSERT INTO _bi_expense_rules VALUES (?,?,?,?,?)", expense_rows(cfg.get("expense_rules", [])))
-        con.executemany("INSERT INTO _bi_regions VALUES (?,?,?,?,?)", region_rows(cfg.get("regions", [])))
+        con.executemany("INSERT INTO _bi_regions VALUES (?,?,?,?,?,?)", region_rows(cfg.get("regions", [])))
+        con.executemany("INSERT INTO _bi_areas VALUES (?,?,?,?,?,?,?)", area_rows(cfg.get("areas", [])))
         con.commit()
     finally:
         if own:

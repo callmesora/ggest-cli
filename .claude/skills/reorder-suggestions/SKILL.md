@@ -27,7 +27,7 @@ Run from the project root (bash quoting; in PowerShell 5.1 escape inner quotes a
 - `days_of_cover` 0 = already out of stock. `suggested_qty` = demand rate × target days − stock (rounded up);
   `order_value` = suggested_qty × last cost (last purchase invoice, net). `supplier` = last real supplier.
 - `margin_pct` uses the catalogue price and the last cost; a blank/0 `price_net` means the price is set per sale.
-- Costs are net of VAT and line discounts, without freight to the Azores (~3 % of goods, see
+- Costs are net of VAT and line discounts, without inbound freight (~3 % of goods, see
   `finance_freight_costs_by_year`): group orders by supplier to dilute freight.
 - No supplier orders (NREQ) are recorded in gGest here, so "on order" is unknown — ask before duplicating an order.
 - Non-stock items (software/licences, hosting, services, freight) are excluded: they are bought on demand.

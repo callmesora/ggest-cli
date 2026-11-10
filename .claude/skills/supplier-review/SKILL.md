@@ -19,7 +19,7 @@ Run from the project root (bash quoting; in PowerShell 5.1 escape inner quotes a
    `uv run ggest run_saved_query --name stock_supplier_best_prices --params '{"months": 12, "limit": 25}'`
 5. Returns/warranty: `credited` in step 1 (supplier credit notes) and the RMA history
    `uv run ggest run_saved_query --name stock_supplier_rmas`
-6. Freight paid per year (Azores logistics): `uv run ggest run_saved_query --name finance_freight_costs_by_year`
+6. Freight paid per year: `uv run ggest run_saved_query --name finance_freight_costs_by_year`
 
 ## Reading the numbers
 - Money net of VAT; credit notes (DEVNC/VNC/VNCP/NCADI) are negative; intra-EU (FTINC) and extra-EU (FTEXC)

@@ -22,8 +22,16 @@
   ],
   "_expense_rules": "first matching rule wins; codes = creditor codes (outros credores); name_like / text_like = SQL LIKE on creditor name / document text (lower case); all=true: code AND text must match",
   "regions": [
-    {"region": "Home island", "postal_ranges": [[9900, 9904]], "locality_like": ["%horta%"]},
-    {"region": "Rest of the region", "postal_ranges": [[9500, 9980]]}
+    {"region": "Home island", "postal_ranges": [[9900, 9904]], "locality_like": ["% hometown %"], "unknown_area": "Home island (area unknown)"},
+    {"region": "Rest of the archipelago", "postal_ranges": [[9500, 9999]]},
+    {"region": "Mainland", "postal_ranges": [[1000, 8999]]}
   ],
-  "_regions": "customer regions from the 4-digit postal code or locality text (first match wins)"
+  "_regions": "where customers are (view customer_regions): first rule whose 4-digit postcode range matches; customers without a postcode: first rule whose address words match (SQL LIKE on ' lower-case address ')",
+  "areas": [
+    {"area": "Harbour district", "region": "Home island", "postal_ranges": [[9901, 9901]]},
+    {"area": "North parish", "region": "Home island", "locality_like": ["%north parish%"], "postal_names": ["NORTH PARISH"]}
+  ],
+  "_areas": "finer areas, in priority order: postcode range, then address words, then postal_names (locality name in gGest's codpostal table); otherwise the codpostal locality itself",
+  "no_address_label": "No address",
+  "other_region_label": "Other / abroad"
 }

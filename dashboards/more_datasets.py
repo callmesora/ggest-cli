@@ -141,6 +141,12 @@ def payment_methods(_ctx: Context) -> list[Row]:
     ]
 
 
+def island_row(row: Row) -> Row:
+    """The dashboard calls regions islands (column names kept for the published page)."""
+    names = {"region": "island", "area": "locality"}
+    return {names.get(k, k): v for k, v in row.items()}
+
+
 DATASETS: list[Dataset] = [
     Dataset("seasonality", "Average sales per month", seasonality),
     Dataset("ticket_bands_yearly", "Sales by invoice size", ticket_bands_yearly),
@@ -167,7 +173,7 @@ DATASETS: list[Dataset] = [
     Dataset(
         "geography_islands",
         "Sales per island",
-        lambda _c: [r for r in run("customers_geography", {"level": "island"}) if r["net_sales"]][:10],
+        lambda _c: [island_row(r) for r in run("customers_geography", {"level": "region"}) if r["net_sales"]][:10],
     ),
     Dataset("cohorts", "Customer retention by cohort", cohorts),
     Dataset("repairs_mix_yearly", "Repairs per equipment group", repairs_mix_yearly),

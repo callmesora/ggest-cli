@@ -24,7 +24,7 @@ fixing the data opens each record in gGest.
 - `invalid_nif`: PT checksum fails (typo) — invoices with a wrong NIF are a tax problem; fix first those with sales.
 - `missing_nif_buyer`: customers with high purchases and no NIF (ask for it on the next sale).
 - `no_contact_active`: active in the last 2 years without phone or e-mail → ask at the counter.
-- `partial_postal_code`: only "9900 Horta" → parish unknown for geography; ask for the full code.
+- `partial_postal_code`: only the 4-digit postcode and town → area unknown for geography; ask for the full code.
 - `inactive_flag_but_buying`: record marked inactive but still invoiced → review the flag.
 - Records opened per year (`created_this_year`) show data-entry volume; many new records with no NIF/contact = training.
 

@@ -41,7 +41,7 @@ def facts_backend(fake):
                 {"rfm_label": "1 Campeões", "customers": 5, "share_pct": 40.0, "net_sales": 1.0},
                 {"rfm_label": "4 Não pode perder", "customers": 2, "share_pct": 5.0, "net_sales": 300.0},
             ],
-            "customers_geography": [{"island": "Faial", "share_pct": 70.0}, {"island": "Pico", "share_pct": 20.0}],
+            "customers_geography": [{"region": "Faial", "share_pct": 70.0}, {"region": "Pico", "share_pct": 20.0}],
             "repairs_revenue_by_year": [
                 {"year": 2020, "orders_with_value": 0, "repairs": 100},
                 {"year": 2021, "orders_with_value": 60, "repairs": 100},

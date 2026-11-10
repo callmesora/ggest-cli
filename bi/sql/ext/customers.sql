@@ -82,7 +82,10 @@ SELECT s.customer_code, s.name, s.nif,
          GLOB '*[29][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]*' AS has_phone,
        (trim(COALESCE(r.contacto1,'')) <> '') AS has_contact_person,
        (replace(trim(COALESCE(s.postal_code,'')),' ','-') GLOB '[1-9][0-9][0-9][0-9]-[0-9][0-9][0-9]*') AS has_full_postal_code,
-       (trim(COALESCE(r.morada,'')) <> '' AND lower(trim(r.morada)) NOT IN ('horta','faial','.','-')) AS has_street_address,
+       (trim(COALESCE(r.morada,'')) <> '' AND lower(trim(r.morada)) NOT IN ('.','-')
+        AND lower(trim(r.morada)) NOT IN (SELECT lower(region) FROM _bi_regions UNION SELECT lower(area) FROM _bi_areas
+                                          UNION SELECT lower(trim(substr(Codigo,10))) FROM codpostal))
+         AS has_street_address,  -- a town or region name alone is not a street address
        -- commercial / fiscal attributes
        COALESCE(r.administracao_publica,'0') = '1' AS is_public_administration,
        COALESCE(r.enviar_faturacao_eletronica,'0') NOT IN ('0','') AS sends_e_invoices,
@@ -178,3 +181,49 @@ SELECT CAST(a.TarefaID AS INTEGER) AS task_id,
 FROM Agenda a
 LEFT JOIN Agenda_Estados e ON e.Codigo = a.estado
 LEFT JOIN Agenda_Tipo_Tarefas t ON t.Codigo = a.tipo;
+
+
+-- Where each customer is: region and area from the configured rules (ggest.json `regions` / `areas`, tables
+-- _bi_regions / _bi_areas), the postcode and gGest's postcode table (codpostal). Defaults: Portugal by postcode.
+-- region: first rule whose postcode range matches; customers without a postcode: first rule whose address words
+--   match; else no_address_label / other_region_label.
+-- area: a postcode-range area; else address words (no postcode, or a postcode inside the area's region); else the
+--   codpostal locality mapped by postal_names; else the codpostal locality itself; else the region's unknown_area.
+DROP VIEW IF EXISTS customer_regions;
+CREATE VIEW customer_regions AS
+WITH cp AS (SELECT substr(Codigo,1,8) AS code, MIN(trim(substr(Codigo,10))) AS loc FROM codpostal GROUP BY 1),
+g0 AS (
+  SELECT c.customer_code, trim(COALESCE(c.postal_code,'')) AS pc,
+         ' ' || lower(COALESCE(c.postal_code,'') || ' ' || COALESCE(c.address,'') || ' ' || COALESCE(c.address2,'')) || ' ' AS t
+  FROM customers c),
+g1 AS (
+  SELECT g0.*,
+         CASE WHEN substr(pc,1,4) GLOB '[1-9][0-9][0-9][0-9]' THEN CAST(substr(pc,1,4) AS INTEGER) END AS p4,
+         CASE WHEN substr(pc,1,4) GLOB '[1-9][0-9][0-9][0-9]' AND substr(pc,6,3) GLOB '[0-9][0-9][0-9]'
+                THEN substr(pc,1,4) || '-' || substr(pc,6,3)
+              WHEN substr(pc,1,7) GLOB '[1-9][0-9][0-9][0-9][0-9][0-9][0-9]'
+                THEN substr(pc,1,4) || '-' || substr(pc,5,3) END AS p7
+  FROM g0),
+g2 AS (
+  SELECT g1.*, cp.loc AS postal_locality,
+         (SELECT r.region FROM _bi_regions r
+          WHERE g1.p4 BETWEEN r.postal_from AND r.postal_to
+             OR (g1.p4 IS NULL AND r.locality_like IS NOT NULL AND g1.t LIKE r.locality_like)
+          ORDER BY r.priority LIMIT 1) AS matched_region
+  FROM g1 LEFT JOIN cp ON cp.code = g1.p7)
+SELECT customer_code, p4 AS postal_prefix, p7 AS postal_code, postal_locality,
+       COALESCE(matched_region,
+                CASE WHEN pc = '' AND trim(t) = '' THEN (SELECT value FROM _bi_config WHERE key = 'no_address_label')
+                     ELSE (SELECT value FROM _bi_config WHERE key = 'other_region_label') END) AS region,
+       COALESCE(
+         (SELECT a.area FROM _bi_areas a WHERE g2.p4 BETWEEN a.postal_from AND a.postal_to ORDER BY a.priority LIMIT 1),
+         (SELECT a.area FROM _bi_areas a
+          WHERE a.locality_like IS NOT NULL AND g2.t LIKE a.locality_like
+            AND (g2.p4 IS NULL OR EXISTS (SELECT 1 FROM _bi_regions r WHERE r.region = a.region
+                                                                     AND g2.p4 BETWEEN r.postal_from AND r.postal_to))
+          ORDER BY a.priority LIMIT 1),
+         (SELECT a.area FROM _bi_areas a WHERE a.postal_name = g2.postal_locality ORDER BY a.priority LIMIT 1),
+         postal_locality,
+         (SELECT r.unknown_area FROM _bi_regions r WHERE r.region = g2.matched_region AND r.unknown_area IS NOT NULL
+          LIMIT 1)) AS area
+FROM g2;
