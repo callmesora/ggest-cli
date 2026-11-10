@@ -16,6 +16,7 @@ question: sales, margin, customers, quotes, repairs, warranty, stock, purchasing
 
 ## Interfaces
 - CLI: `uv run ggest [--db <path>] <tool> [--param v] [--json]`. `--params` accepts JSON or `key=value,key=value`.
+- Chat app for people: `uv run ggest-app` (assistant/; same tools, OpenRouter models, inline widgets).
 - MCP: `uv run ggest-mcp [--db <path>]` (FastMCP, stdio) exposes the same tools, all marked read-only. Tables
   come back as `{columns, rows}` (names once, not per row); `truncated: true` means cut at `limit`.
 - Context budget: `saved_queries` lists one line per query, so search or filter by domain first; `--name`

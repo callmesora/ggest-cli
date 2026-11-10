@@ -50,6 +50,20 @@ uv run ggest --db D:/other/data.sqlite kpis                     # another gGest 
 Date words work in any date parameter: `today` (= last document date in the data), `year_start`,
 `today_last_year`, `this_year`, `last_year`, ... `uv run ggest check-queries` runs the whole library.
 
+## Chat assistant (desktop-style web app)
+
+```bash
+uv run ggest-app            # opens http://127.0.0.1:8765 in the browser
+```
+
+A local chat app in the style of desktop coding assistants: **projects** (one per gGest database) with their
+**chats** in the sidebar, answers streamed with the tool steps the assistant took, and inline widgets (KPI cards,
+charts, breakdowns, tables, callouts, clickable follow-up questions) drawn from `<ui-element>` blocks the model
+writes. On first start, paste an [OpenRouter](https://openrouter.ai/keys) API key and pick a model (Claude, GPT,
+Gemini, DeepSeek, or any OpenRouter model id); each chat can switch model. The key, projects and chats stay on
+this computer (`data/assistant.sqlite`); the server only listens on localhost. Code: `assistant/` (Starlette
+server, agent loop, OpenRouter client, system prompt in `prompts.py`, UI in `assistant/static/`).
+
 ## 4. Agents
 
 - **Claude Code**: open this folder. `CLAUDE.md`/`AGENTS.md` and the skills in `.claude/skills/` load automatically,
