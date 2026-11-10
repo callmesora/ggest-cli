@@ -1,6 +1,6 @@
 # Customers & CRM (gGest)
 
-Views in `bi/sql/ext/customers.sql` (apply: `py -m bi build-views --file bi/sql/ext/customers.sql`), saved queries in
+Views in `bi/sql/ext/customers.sql` (apply: `uv run ggest build-views --file bi/sql/ext/customers.sql`), saved queries in
 `bi/queries/customers/`, skills `customer-briefing`, `winback-campaign`, `customer-segments`, `customer-data-cleanup`.
 
 ## Views

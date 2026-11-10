@@ -9,17 +9,17 @@ There is a single warehouse in this gGest database. For prices/sales of the item
 
 ## Steps
 1. Find the item and its stock (code, barcode or words of the description, all must match):
-   `py -m bi run_saved_query --name stock_item_lookup --params '{"search": "toner 415x"}'`
+   `uv run ggest run_saved_query --name stock_item_lookup --params '{"search": "toner 415x"}'`
 2. Stock card with running balance (newest first; `start` = first date to show):
-   `py -m bi run_saved_query --name stock_item_movements --params '{"item": "W2030X", "start": "2024-01-01", "limit": 30}'`
+   `uv run ggest run_saved_query --name stock_item_movements --params '{"item": "W2030X", "start": "2024-01-01", "limit": 30}'`
 3. Serial number (warranty claim, stolen/returned equipment) — 3+ characters of the serial:
-   `py -m bi run_saved_query --name stock_serial_lookup --params '{"serial": "5CD21233ZX"}'`
+   `uv run ggest run_saved_query --name stock_serial_lookup --params '{"serial": "5CD21233ZX"}'`
    Serials sold in a period, by customer (code or name), item or part of the serial:
-   `py -m bi run_saved_query --name stock_serials_sold --params '{"customer": "2055", "start": "2024-01-01", "end": "2024-12-31"}'`
+   `uv run ggest run_saved_query --name stock_serials_sold --params '{"customer": "2055", "start": "2024-01-01", "end": "2024-12-31"}'`
 4. Stock that left without a sale this year (miscellaneous exits, write-offs, internal use):
-   `py -m bi run_saved_query --name stock_adjustments --params '{"start": "year_start", "end": "today"}'`
-5. Data checks: negative stock `py -m bi run_saved_query --name stock_negative_items`;
-   card vs documents `py -m bi run_saved_query --name stock_reconciliation_check` (first row = items checked / matching).
+   `uv run ggest run_saved_query --name stock_adjustments --params '{"start": "year_start", "end": "today"}'`
+5. Data checks: negative stock `uv run ggest run_saved_query --name stock_negative_items`;
+   card vs documents `uv run ggest run_saved_query --name stock_reconciliation_check` (first row = items checked / matching).
 
 ## Reading the numbers
 - `qty_on_hand` = gGest real stock; `qty_available` = on hand − reserved − goods out on delivery notes (GTC not yet

@@ -6,19 +6,19 @@ description: Performance review of the repair workshop — volume trend, equipme
 
 Run from the project root. Use full years for trends; `this_year` is partial (compare with `ytd_until`).
 
-1. **Volume**: `py -m bi run_saved_query --name repairs_volume --params '{"start":"2017-01-01"}'`
+1. **Volume**: `uv run ggest run_saved_query --name repairs_volume --params '{"start":"2017-01-01"}'`
    (`orders_ytd` = same period of each year; seasonality: `repairs_seasonality`, `"by":"weekday"` for weekdays).
-2. **Mix**: `py -m bi run_saved_query --name repairs_equipment_mix --params '{"start":"2021-01-01"}'` (`"dim":"brand"`)
-   and faults: `py -m bi run_saved_query --name repairs_fault_categories --params '{"start":"2021-01-01","grain":"year"}'`.
+2. **Mix**: `uv run ggest run_saved_query --name repairs_equipment_mix --params '{"start":"2021-01-01"}'` (`"dim":"brand"`)
+   and faults: `uv run ggest run_saved_query --name repairs_fault_categories --params '{"start":"2021-01-01","grain":"year"}'`.
    Faults of one equipment type (e.g. notebooks this year): add `"equipment_group":"notebook"` (or `desktop`,
-   `impressora`, `tablet_telemovel`, `outro`): `py -m bi run_saved_query --name repairs_fault_categories --params '{"equipment_group":"notebook","start":"year_start"}'`.
-3. **Work done**: `py -m bi run_saved_query --name repairs_work_done --params '{"start":"2015-01-01"}'`;
-   parts: `py -m bi run_saved_query --name repairs_parts_used`.
-4. **Quality**: comebacks `py -m bi run_saved_query --name repairs_repeat_devices --params '{"start":"2017-01-01"}'`
+   `impressora`, `tablet_telemovel`, `outro`): `uv run ggest run_saved_query --name repairs_fault_categories --params '{"equipment_group":"notebook","start":"year_start"}'`.
+3. **Work done**: `uv run ggest run_saved_query --name repairs_work_done --params '{"start":"2015-01-01"}'`;
+   parts: `uv run ggest run_saved_query --name repairs_parts_used`.
+4. **Quality**: comebacks `uv run ggest run_saved_query --name repairs_repeat_devices --params '{"start":"2017-01-01"}'`
    (`window_days` 30/90); turnaround only 2011-2019: `repairs_turnaround`.
-5. **Money**: `py -m bi run_saved_query --name repairs_revenue_by_year` and unbilled orders
-   `py -m bi run_saved_query --name repairs_unbilled_orders --params '{"start":"2021-01-01"}'`.
-6. **Warranty load**: `py -m bi run_saved_query --name repairs_warranty_share` (`"grain":"equipment"` per type).
+5. **Money**: `uv run ggest run_saved_query --name repairs_revenue_by_year` and unbilled orders
+   `uv run ggest run_saved_query --name repairs_unbilled_orders --params '{"start":"2021-01-01"}'`.
+6. **Warranty load**: `uv run ggest run_saved_query --name repairs_warranty_share` (`"grain":"equipment"` per type).
 7. **Sales from the workshop**: `repairs_replacement_sales` (per year) and `repairs_replacement_leads` (list);
    customers: `repairs_top_customers`, `repairs_customer_frequency`.
 

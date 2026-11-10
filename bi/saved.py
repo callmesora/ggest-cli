@@ -1,128 +1,145 @@
-"""Saved-query library: every bi/queries/**/*.sql file is a reusable, documented query.
+"""Saved-query library: every bi/queries/<domain>/*.sql file is a reusable, documented query.
 
 File format (header comments, then ONE SELECT/WITH statement):
     -- name: repairs_by_brand_year
     -- description: Repairs per brand per year (top brands)
-    -- params: start=2017-01-01, end=2026-12-31, limit=20
+    -- params: start=2017-01-01, end=today, limit=20
     SELECT ... WHERE opened_on BETWEEN :start AND :end ... LIMIT :limit
 
-Params use SQLite named placeholders (:start). Defaults come from the `params` line.
-Date words (as defaults or passed values): today = last document date in the data (the snapshot date),
-this_year / last_year (e.g. 2026), year_start / last_year_start / last_year_end (ISO dates),
-today_last_year (same day one year earlier, for year-to-date comparisons), today_mmdd (e.g. 11-08),
-years_ago_3 (e.g. 2023).
-Exposed as tools `saved_queries` (list) and `run_saved_query` (CLI and MCP).
+Params use SQLite named placeholders (:start); defaults come from the `params` line and may be date words
+(see bi.dates). Exposed as the tools `saved_queries` (search) and `run_saved_query`.
 """
-import re
-from pathlib import Path
 
-from . import db
+import re
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from . import dates, db
 
 QUERIES = Path(__file__).resolve().parent / "queries"
+_META = re.compile(r"^--\s*(name|description|params|domain):\s*(.*)$", re.MULTILINE)
+_INT = re.compile(r"-?\d+")
+_FLOAT = re.compile(r"-?\d+\.\d+")
+
+# kept for older imports
+date_words = dates.date_words
+resolve = dates.resolve
 
 
-def _parse(path):
+@dataclass(frozen=True)
+class SavedQuery:
+    name: str
+    domain: str
+    description: str
+    params: dict[str, Any]
+    sql: str
+    file: Path
+
+    def summary(self) -> dict[str, Any]:
+        return {"name": self.name, "domain": self.domain, "description": self.description, "params": self.params}
+
+    def matches(self, domain: str | None, words: list[str]) -> bool:
+        text = f"{self.name} {self.description}".lower()
+        return (not domain or self.domain == domain) and all(w in text for w in words)
+
+
+@dataclass(frozen=True)
+class Page:
+    """Rows of a result, and whether more rows existed than the limit."""
+
+    rows: list[dict[str, Any]]
+    truncated: bool
+
+
+def parse_value(text: str) -> Any:
+    """'10' -> 10, '1.5' -> 1.5, anything else stays text."""
+    text = text.strip()
+    if _INT.fullmatch(text):
+        return int(text)
+    if _FLOAT.fullmatch(text):
+        return float(text)
+    return text
+
+
+def parse_params_line(line: str) -> dict[str, Any]:
+    """'start=2017-01-01, limit=20' -> {'start': '2017-01-01', 'limit': 20}."""
+    out = {}
+    for part in filter(None, (p.strip() for p in line.split(","))):
+        key, _, value = part.partition("=")
+        out[key.strip()] = parse_value(value)
+    return out
+
+
+def parse(path: Path) -> SavedQuery:
     text = path.read_text(encoding="utf-8")
-    meta = dict(re.findall(r"^--\s*(name|description|params|domain):\s*(.*)$", text, re.M))
-    defaults = {}
-    for part in filter(None, (p.strip() for p in meta.get("params", "").split(","))):
-        k, _, v = part.partition("=")
-        v = v.strip()
-        defaults[k.strip()] = int(v) if re.fullmatch(r"-?\d+", v) else (float(v) if re.fullmatch(r"-?\d+\.\d+", v) else v)
-    sql = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("--")).strip().rstrip(";")
-    return {"name": meta.get("name", path.stem), "description": meta.get("description", ""),
-            "domain": meta.get("domain", path.parent.name), "params": defaults, "sql": sql, "file": str(path)}
+    meta = dict(_META.findall(text))
+    sql = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("--")).strip().rstrip(";")
+    return SavedQuery(
+        name=meta.get("name", path.stem),
+        domain=meta.get("domain", path.parent.name),
+        description=meta.get("description", ""),
+        params=parse_params_line(meta.get("params", "")),
+        sql=sql,
+        file=path,
+    )
 
 
-def catalog():
-    return {q["name"]: q for q in (_parse(p) for p in sorted(QUERIES.rglob("*.sql")))}
+def catalog() -> dict[str, SavedQuery]:
+    return {q.name: q for q in map(parse, sorted(QUERIES.rglob("*.sql")))}
 
 
-def saved_queries(domain=None, search=None, name=None):
-    """List saved queries (name, domain, description, params); filter by domain and/or words in name/description;
-    `name` = one query in full (description, params and SQL)."""
+def get(name: str) -> SavedQuery:
+    query = catalog().get(name)
+    if not query:
+        raise ValueError(f"unknown saved query {name!r}; search with saved_queries")
+    return query
+
+
+def saved_queries(domain: str | None = None, search: str | None = None, name: str | None = None) -> Any:
+    """List saved queries (name, domain, description, params) filtered by domain and/or words in the name or
+    description; `name` returns one query in full, with its SQL."""
     if name:
-        q = catalog().get(name)
-        if not q:
-            raise ValueError(f"unknown saved query {name!r}")
-        return {k: q[k] for k in ("name", "domain", "description", "params", "sql")}
+        query = get(name)
+        return {**query.summary(), "sql": query.sql}
     words = (search or "").lower().split()
-    out = []
-    for q in catalog().values():
-        text = (q["name"] + " " + q["description"]).lower()
-        if (not domain or q["domain"] == domain) and all(w in text for w in words):
-            out.append({k: q[k] for k in ("name", "domain", "description", "params")})
-    return out
+    return [q.summary() for q in catalog().values() if q.matches(domain, words)]
 
 
-def check(domain=None):
-    """Run every saved query with its defaults: name, rows, seconds, error (for testing the library)."""
-    import time
-    out = []
-    for q in catalog().values():
-        if domain and q["domain"] != domain:
-            continue
-        t = time.time()
-        try:
-            n, err = len(run_saved_query(q["name"], limit=100000)), ""
-        except Exception as e:      # noqa: BLE001 - report every failure
-            n, err = None, str(e)[:200]
-        out.append({"name": q["name"], "rows": n, "secs": round(time.time() - t, 2), "error": err})
-    return out
+def _round(value: Any) -> Any:
+    return round(value, 2) if isinstance(value, float) else value
 
 
-_DATES = None
-LAST_TRUNCATED = False      # set by run_saved_query: more rows existed than `limit`
-_WORDS = ("today", "this_year", "last_year", "year_start", "last_year_start", "last_year_end", "today_last_year",
-          "today_mmdd", "years_ago_3")
-
-
-def date_words():
-    """today = latest sales/repair date in the database, so old snapshots answer as of their own date."""
-    global _DATES
-    if _DATES is None:
-        import datetime as dt
-        con = db.connect(read_only=True)
-        try:
-            d = con.execute("SELECT MAX(doc_date) FROM sales_docs WHERE doc_date <= date('now')").fetchone()[0]
-        finally:
-            con.close()
-        today = dt.date.fromisoformat(d[:10]) if d else dt.date.today()
-        try:
-            tly = today.replace(year=today.year - 1)
-        except ValueError:
-            tly = today.replace(year=today.year - 1, day=28)
-        _DATES = {"today": today.isoformat(), "this_year": today.year, "last_year": today.year - 1,
-                  "year_start": f"{today.year}-01-01", "last_year_start": f"{today.year - 1}-01-01",
-                  "last_year_end": f"{today.year - 1}-12-31", "today_last_year": tly.isoformat(),
-                  "today_mmdd": today.strftime("%m-%d"), "years_ago_3": today.year - 3}
-    return _DATES
-
-
-def resolve(args):
-    """Replace date words in tool arguments (used by the CLI and MCP server for every tool)."""
-    if not any(isinstance(v, str) and v in _WORDS for v in args.values()):
-        return args
-    w = date_words()
-    return {k: w.get(v, v) if isinstance(v, str) else v for k, v in args.items()}
-
-
-def run_saved_query(name, params=None, limit=500):
-    """Run a saved query by name; `params` overrides defaults (dict)."""
-    q = catalog().get(name)
-    if not q:
-        raise ValueError(f"unknown saved query {name!r}")
-    p = dict(q["params"]); p.update(params or {})
-    if any(isinstance(v, str) and v in _WORDS for v in p.values()):
-        w = date_words()
-        p = {k: w.get(v, v) if isinstance(v, str) else v for k, v in p.items()}
-    con = db.connect(read_only=True)
-    try:
-        cur = con.execute(q["sql"], p)
+def run_page(name: str, params: dict[str, Any] | None = None, limit: int = 500) -> Page:
+    """Run a saved query by name; `params` override its defaults. Says whether rows were cut at `limit`."""
+    query = get(name)
+    values = dates.resolve({**query.params, **(params or {})})
+    limit = int(limit)
+    with db.reading() as con:
+        cur = con.execute(query.sql, values)
         cols = [c[0] for c in cur.description]
-        data = cur.fetchmany(int(limit) + 1)
-        global LAST_TRUNCATED
-        LAST_TRUNCATED = len(data) > int(limit)
-        return [dict(zip(cols, (round(v, 2) if isinstance(v, float) else v for v in r))) for r in data[:int(limit)]]
-    finally:
-        con.close()
+        data = cur.fetchmany(limit + 1)
+    rows = [dict(zip(cols, map(_round, r), strict=True)) for r in data[:limit]]
+    return Page(rows, truncated=len(data) > limit)
+
+
+def run_saved_query(name: str, params: dict[str, Any] | None = None, limit: int = 500) -> list[dict[str, Any]]:
+    """Run a saved query by name; `params` override its defaults (rows only)."""
+    return run_page(name, params, limit).rows
+
+
+def check(domain: str | None = None) -> list[dict[str, Any]]:
+    """Run every saved query with its defaults: name, rows, seconds, error (tests the library)."""
+    out = []
+    for query in catalog().values():
+        if domain and query.domain != domain:
+            continue
+        started = time.perf_counter()
+        try:
+            count, error = len(run_saved_query(query.name, limit=100_000)), ""
+        except Exception as e:  # noqa: BLE001 - report every failure, keep going
+            count, error = None, str(e)[:200]
+        secs = round(time.perf_counter() - started, 2)
+        out.append({"name": query.name, "rows": count, "secs": secs, "error": error})
+    return out

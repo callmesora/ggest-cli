@@ -15,20 +15,20 @@ It is an estimate: say "provavelmente" for likely_won / not_won.
 
 ## Steps
 1. Follow-up list (recent quotes not converted, biggest first):
-   `py -m bi run_saved_query --name sales_quotes_followup --params '{"start": "2026-08-01", "min_net": 200}'`
+   `uv run ggest run_saved_query --name sales_quotes_followup --params '{"start": "2026-08-01", "min_net": 200}'`
    (default: since last_year_start; `doc_type` ORC / FPF / ENC / all; `outcome` open / partial / not_won / all).
    `open` = still valid (`valid_until` not passed; else ≤ 60 days old). Rows with `variant_of` are revisions of
    another quote: report the pipeline as `open_net_dedup` (totals cover all matches, not just the rows shown).
    Old `not_won` to public bodies are usually lost tenders, not forgotten sales.
 2. Detail of one quote (lines, current price/stock, cost) before calling the customer:
-   `py -m bi run_saved_query --name sales_quote_detail --params '{"doc_id": "ORC 2026/427"}'`
+   `uv run ggest run_saved_query --name sales_quote_detail --params '{"doc_id": "ORC 2026/427"}'`
    or all quotes of a customer: `--params '{"customer_code": "<customer_code>"}'`.
-   Contact data only for that customer: `py -m bi customer_profile --query <customer_code>`.
-3. Win rate per year: `py -m bi run_saved_query --name sales_quotes_conversion_by_year --params '{"doc_type": "all"}'`
+   Contact data only for that customer: `uv run ggest customer_profile --query <customer_code>`.
+3. Win rate per year: `uv run ggest run_saved_query --name sales_quotes_conversion_by_year --params '{"doc_type": "all"}'`
    (value win rate is usually far below the count win rate: big tender quotes are rarely won).
-4. What we lose by product group: `py -m bi run_saved_query --name sales_quotes_by_group --params '{"start": "last_year_start"}'`.
+4. What we lose by product group: `uv run ggest run_saved_query --name sales_quotes_by_group --params '{"start": "last_year_start"}'`.
 5. Goods shipped but not invoiced (delivery notes without an invoice link):
-   `py -m bi run_saved_query --name sales_delivery_notes_not_invoiced --params '{"start": "year_start"}'`
+   `uv run ggest run_saved_query --name sales_delivery_notes_not_invoiced --params '{"start": "year_start"}'`
    — if `nearby_invoice` is filled the note was probably invoiced without a link; `refers_to_invoice = 1` means
    it only accompanied invoiced goods. Review the rest.
 

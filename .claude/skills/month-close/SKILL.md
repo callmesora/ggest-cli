@@ -8,25 +8,25 @@ Run from the project root. For a closed month pass its **last day**; with the de
 periods are month-to-date, cut at the same day of the month (like-for-like).
 
 ## Steps
-1. The pack: `py -m bi run_saved_query --name finance_month_close --params '{"as_of":"2026-10-31"}'`
+1. The pack: `uv run ggest run_saved_query --name finance_month_close --params '{"as_of":"2026-10-31"}'`
    Rows: net_sales, gross_margin(_pct), invoices, purchases_net, overheads_staff/rent/other/total,
    operating_result_indicative, investments_not_deducted, vat_output/input/net, money_in/out, receivables_end,
    receivables_overdue_90d_end, payables_end. Columns: this_month, previous_month, same_month_last_year,
    vs_prev, vs_last_year and change_unit (% for amounts, **pp** for gross_margin_pct).
    Balances are at the end of each period: for a closed month they differ from `finance_receivables_aging`
    (balance today); say which date each figure refers to.
-2. Year context: `py -m bi run_saved_query --name finance_profit_and_loss_by_year --params '{"cutoff_mmdd":"10-31"}'`
+2. Year context: `uv run ggest run_saved_query --name finance_profit_and_loss_by_year --params '{"cutoff_mmdd":"10-31"}'`
    (year-to-date to the same day each year; `period` says full/partial; for partial rows use
    `break_even_annualized`, never `break_even_sales`, against a full-year forecast) and
-   `py -m bi run_saved_query --name management_monthly_scorecard` (each month vs last year).
+   `uv run ggest run_saved_query --name management_monthly_scorecard` (each month vs last year).
 3. Explain a big change in overheads:
-   `py -m bi run_saved_query --name finance_operating_expenses_by_category --params '{"start_year":2026}'`;
-   in sales: `py -m bi saved_queries --search "period_comparison"`.
-4. Receivables, if they grew: `py -m bi run_saved_query --name finance_receivables_trend`.
+   `uv run ggest run_saved_query --name finance_operating_expenses_by_category --params '{"start_year":2026}'`;
+   in sales: `uv run ggest saved_queries --search "period_comparison"`.
+4. Receivables, if they grew: `uv run ggest run_saved_query --name finance_receivables_trend`.
 5. VAT by rate for the month:
-   `py -m bi run_saved_query --name finance_vat_by_period --params '{"start":"2026-10-01","end":"2026-10-31","granularity":"month"}'`.
+   `uv run ggest run_saved_query --name finance_vat_by_period --params '{"start":"2026-10-01","end":"2026-10-31","granularity":"month"}'`.
 6. Missing costs: overhead documents often arrive late (rent, payroll, forwarders). If overheads_total is far below
-   a normal month, say the month may be incomplete. `py -m bi run_saved_query --name finance_efatura_unmatched`
+   a normal month, say the month may be incomplete. `uv run ggest run_saved_query --name finance_efatura_unmatched`
    lists e-fatura invoices not registered in gGest (only for periods imported from e-fatura).
 
 ## Rules and traps

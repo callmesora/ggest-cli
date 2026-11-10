@@ -6,20 +6,21 @@ business views, a CLI, 139 documented saved queries, 26 agent skills and an MCP 
 
 ```
 pipeline/          .fic/.ndx/.mmo -> SQLite. Native reader (learned layouts) or WDMap on a hidden desktop
-bi/                views (sql/), tools (metrics.py), saved queries (queries/<domain>/), CLI, MCP server, config
+bi/                views (sql/), typed tools (metrics/), saved queries (queries/<domain>/), click CLI, FastMCP server
+tests/             pytest suite on a synthetic database (+ `livedb` checks on a real one)
 .claude/skills/    agent skills: business review, customer briefing, collections, repair desk, reorder, ...
 docs/              DATA_DICTIONARY.md + domains/<domain>.md (tables, codes, traps)
 AGENTS.md          start here if you are an agent
 ```
 
-Requirements: Windows, Python 3.12+ (`py`), standard library only. WDMap (WINDEV 28, free Express edition, no
+Requirements: Windows and [uv](https://docs.astral.sh/uv/); `uv sync` installs Python 3.12+, click and FastMCP. WDMap (WINDEV 28, free Express edition, no
 activation) is needed only for the first export and for tables the native reader does not know.
 Nothing writes to gGest: the pipeline copies the files first.
 
 ## 1. Build the database
 
 ```bash
-py pipeline/refresh.py --source "<gGest data folder>" --reader native
+uv run python pipeline/refresh.py --source "<gGest data folder>" --reader native
 ```
 
 Copies the folder, reads every table (native reader: ~2 min; tables without a validated layout fall back to WDMap
@@ -31,23 +32,23 @@ new database replaces the old one only when complete. `--reader wdmap` (default)
 
 Copy `bi/config.example.json` to `ggest.json` next to `data.sqlite`: internal document types, invoice series that
 are a business unit (e.g. a franchise corner) or not trading revenue, expense categories, regions. Then
-`py -m bi build-views`. The `new-database-setup` skill walks an agent through it with the `setup_*` queries.
+`uv run ggest build-views`. The `new-database-setup` skill walks an agent through it with the `setup_*` queries.
 
 ## 3. Ask
 
 ```bash
-py -m bi run_saved_query --name management_kpi_snapshot     # the business at a glance + data date
-py -m bi run_saved_query --name management_change_drivers --params dim=segment
-py -m bi year_over_year
-py -m bi top_customers --start year_start --segment empresa
-py -m bi saved_queries --search "warranty"                  # find a saved query
-py -m bi query --sql "SELECT year, SUM(net) FROM sales_facts GROUP BY 1"
-py -m bi --db D:/other/data.sqlite kpis                     # another gGest database
+uv run ggest run_saved_query --name management_kpi_snapshot     # the business at a glance + data date
+uv run ggest run_saved_query --name management_change_drivers --params dim=segment
+uv run ggest year_over_year
+uv run ggest top_customers --start year_start --segment empresa
+uv run ggest saved_queries --search "warranty"                  # find a saved query
+uv run ggest query --sql "SELECT year, SUM(net) FROM sales_facts GROUP BY 1"
+uv run ggest --db D:/other/data.sqlite kpis                     # another gGest database
 ```
 
-`py -m bi list` shows every tool; `--json` for machine-readable output; `--params` takes JSON or `k=v,k=v`.
+`uv run ggest list` shows every tool; `--json` for machine-readable output; `--params` takes JSON or `k=v,k=v`.
 Date words work in any date parameter: `today` (= last document date in the data), `year_start`,
-`today_last_year`, `this_year`, `last_year`, ... `py -m bi check-queries` runs the whole library.
+`today_last_year`, `this_year`, `last_year`, ... `uv run ggest check-queries` runs the whole library.
 
 ## 4. Agents
 
@@ -63,8 +64,19 @@ in bulk.
 
 ## Extend
 
-A `.sql` file with a `-- name / -- description / -- params` header in `bi/queries/<domain>/` becomes a tool; a view
-goes in `bi/sql/ext/<domain>.sql`; a skill in `.claude/skills/<name>/SKILL.md`. Details in `AGENTS.md`.
+A `.sql` file with a `-- name / -- description / -- params` header in `bi/queries/<domain>/` becomes a saved query;
+a typed function with `@tool` in `bi/metrics/` becomes both a CLI command and an MCP tool (its signature is the
+schema); a view goes in `bi/sql/ext/<domain>.sql`; a skill in `.claude/skills/<name>/SKILL.md`. Details in
+`AGENTS.md`.
+
+## Develop
+
+```bash
+uv sync
+uv run ruff check . && uv run ruff format --check .
+uv run pytest --cov --cov-report=json
+uv run python scripts/crap.py --max 30      # complexity x coverage, per function
+```
 
 ## Native reader (how it works)
 

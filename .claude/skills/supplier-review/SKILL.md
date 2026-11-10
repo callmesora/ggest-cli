@@ -8,18 +8,18 @@ Run from the project root (bash quoting; in PowerShell 5.1 escape inner quotes a
 
 ## Steps
 1. Scorecard for the period (spend, share, items, credited %, order frequency, RMAs):
-   `py -m bi run_saved_query --name stock_supplier_scorecard --params '{"start": "last_year_start", "end": "today", "limit": 20}'`
+   `uv run ggest run_saved_query --name stock_supplier_scorecard --params '{"start": "last_year_start", "end": "today", "limit": 20}'`
 2. Concentration over the years and origin (Portugal / EU / extra-EU) — finance queries:
-   `py -m bi run_saved_query --name finance_top_suppliers` and `py -m bi run_saved_query --name finance_purchases_by_origin`
+   `uv run ggest run_saved_query --name finance_top_suppliers` and `uv run ggest run_saved_query --name finance_purchases_by_origin`
 3. What we buy from one supplier (`supplier` = code from step 1 or part of the name; top items, cost, what sold, stock left):
-   `py -m bi run_saved_query --name stock_supplier_items --params '{"supplier": "23", "start": "last_year_start", "limit": 25}'`
+   `uv run ggest run_saved_query --name stock_supplier_items --params '{"supplier": "23", "start": "last_year_start", "limit": 25}'`
 4. Prices: increases in the last 12 months vs the 12 before, and items bought cheaper elsewhere:
-   `py -m bi run_saved_query --name stock_supplier_price_changes --params '{"group_by": "supplier", "limit": 15}'`
+   `uv run ggest run_saved_query --name stock_supplier_price_changes --params '{"group_by": "supplier", "limit": 15}'`
    (per supplier: items up/down, weighted %, extra € paid) then items: `{"direction": "up", "min_change_pct": 5, "limit": 25}`
-   `py -m bi run_saved_query --name stock_supplier_best_prices --params '{"months": 12, "limit": 25}'`
+   `uv run ggest run_saved_query --name stock_supplier_best_prices --params '{"months": 12, "limit": 25}'`
 5. Returns/warranty: `credited` in step 1 (supplier credit notes) and the RMA history
-   `py -m bi run_saved_query --name stock_supplier_rmas`
-6. Freight paid per year (Azores logistics): `py -m bi run_saved_query --name finance_freight_costs_by_year`
+   `uv run ggest run_saved_query --name stock_supplier_rmas`
+6. Freight paid per year (Azores logistics): `uv run ggest run_saved_query --name finance_freight_costs_by_year`
 
 ## Reading the numbers
 - Money net of VAT; credit notes (DEVNC/VNC/VNCP/NCADI) are negative; intra-EU (FTINC) and extra-EU (FTEXC)

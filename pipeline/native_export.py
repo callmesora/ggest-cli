@@ -11,100 +11,119 @@ is byte-identical to the learned one. Everything else is returned as a fallback 
 
     py native_export.py <fic_dir> <xml_dir> [--tables a,b]
 """
+
 import argparse
 import csv
 import hashlib
 import json
-import os
 import sys
 import time
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
-from fic_reader import DEFAULT_LAYOUTS, check_fingerprint, load_layouts, read_table, write_xml  # noqa: E402
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+from fic_reader import DEFAULT_LAYOUTS, check_fingerprint, fic_files, load_layouts, read_table, write_xml  # noqa: E402
 
-DEFAULT_VALIDATION = os.path.join(HERE, "layouts", "validation.tsv")
-LOG_NAME = "_log_worker_native.tsv"   # matches the _log_worker*.tsv glob used by refresh/build
+DEFAULT_VALIDATION = HERE / "layouts" / "validation.tsv"
+LOG_NAME = "_log_worker_native.tsv"  # matches the _log_worker*.tsv glob used by refresh/build
+EMPTY = "EMPTY_OR_NO_EXPORT"
 
-
-def load_validation(path=DEFAULT_VALIDATION):
-    st = {}
-    if os.path.exists(path):
-        with open(path, encoding="utf-8") as f:
-            for r in csv.DictReader(f, delimiter="\t", quoting=csv.QUOTE_NONE):
-                st[r["table"]] = r["status"]
-    return st
+# (log line, None) when the table was read natively; (None, reason) for a WDMap fallback
+Outcome = tuple[str | None, str | None]
 
 
-def sha1(path):
-    h = hashlib.sha1()
-    with open(path, "rb") as f:
+def load_validation(path: str | Path = DEFAULT_VALIDATION) -> dict[str, str]:
+    """{table: status} from validation.tsv ({} if it does not exist)."""
+    path = Path(path)
+    if not path.exists():
+        return {}
+    with path.open(encoding="utf-8") as f:
+        return {r["table"]: r["status"] for r in csv.DictReader(f, delimiter="\t", quoting=csv.QUOTE_NONE)}
+
+
+def sha1(path: str | Path) -> str:
+    """SHA-1 of a file (identity check, not security)."""
+    h = hashlib.sha1(usedforsecurity=False)
+    with Path(path).open("rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
 
 
-def export(fic_dir, xml_dir, tables=None, layouts_path=DEFAULT_LAYOUTS, validation_path=DEFAULT_VALIDATION,
-           log=print):
+def _empty_table(name: str, fic: Path, lay: dict[str, Any]) -> Outcome:
+    """A table learned without rows is exported as empty while its .fic is unchanged."""
+    if lay.get("empty_sha1") and lay["empty_sha1"] == sha1(fic):
+        return f"{name}\t{fic.stat().st_size}\t{EMPTY}\t0\t0\n", None
+    return None, lay.get("error") or "table had no rows when learned and has changed"
+
+
+def export_table(name: str, fic: Path, lay: dict[str, Any] | None, status: str, xml_dir: Path) -> Outcome:
+    """Write one table's XML if it can be read natively."""
+    t0 = time.time()
+    if lay is None:
+        return None, "no layout (new table?)"
+    if not lay.get("columns"):
+        return _empty_table(name, fic, lay)
+    if status != "exact":
+        return None, f"validation status {status}"
+    ok, why, _ = check_fingerprint(fic, lay)
+    if not ok:
+        return None, "fingerprint changed: " + why
+    out = xml_dir / f"{name}.XML"
+    try:
+        n = write_xml(out, name, read_table(fic, lay))
+    except Exception as e:  # noqa: BLE001 - any reader failure sends the table to WDMap
+        return None, f"read error {type(e).__name__}: {e}"
+    if not n:
+        out.unlink()
+    return f"{name}\t{fic.stat().st_size}\t{'OK' if n else EMPTY}\t{n}\t{time.time() - t0:.1f}\n", None
+
+
+def export(
+    fic_dir: str | Path,
+    xml_dir: str | Path,
+    tables: list[str] | None = None,
+    layouts_path: str | Path = DEFAULT_LAYOUTS,
+    validation_path: str | Path = DEFAULT_VALIDATION,
+    log: Callable[[str], object] = print,
+) -> tuple[list[str], dict[str, str]]:
     """Returns (native_tables, fallback {table: reason})."""
-    os.makedirs(xml_dir, exist_ok=True)
+    xml_dir = Path(xml_dir)
+    xml_dir.mkdir(parents=True, exist_ok=True)
     layouts = load_layouts(layouts_path)["tables"]
     valid = load_validation(validation_path)
-    fics = {os.path.splitext(f)[0]: os.path.join(fic_dir, f) for f in os.listdir(fic_dir)
-            if f.lower().endswith(".fic")}
+    fics = fic_files(fic_dir)
     names = sorted((t for t in fics if not tables or t in tables), key=str.lower)
     done, fallback = [], {}
-    logf = open(os.path.join(xml_dir, LOG_NAME), "a", encoding="utf-8")
     t_all = time.time()
-    for name in names:
-        fic = fics[name]
-        lay = layouts.get(name)
-        t0 = time.time()
-        if lay is None:
-            fallback[name] = "no layout (new table?)"
-            continue
-        if not lay.get("columns"):
-            if lay.get("empty_sha1") and lay["empty_sha1"] == sha1(fic):
-                logf.write(f"{name}\t{os.path.getsize(fic)}\tEMPTY_OR_NO_EXPORT\t0\t0\n")
-                done.append(name)
+    with (xml_dir / LOG_NAME).open("a", encoding="utf-8") as logf:
+        for name in names:
+            line, reason = export_table(name, fics[name], layouts.get(name), valid.get(name, "missing"), xml_dir)
+            if line is None:
+                fallback[name] = reason
             else:
-                fallback[name] = lay.get("error") or "table had no rows when learned and has changed"
-            continue
-        if valid.get(name) != "exact":
-            fallback[name] = f"validation status {valid.get(name, 'missing')}"
-            continue
-        ok, why, _ = check_fingerprint(fic, lay)
-        if not ok:
-            fallback[name] = "fingerprint changed: " + why
-            continue
-        try:
-            n = write_xml(os.path.join(xml_dir, name + ".XML"), name, read_table(fic, lay))
-        except Exception as e:
-            fallback[name] = f"read error {type(e).__name__}: {e}"
-            continue
-        status = "OK" if n else "EMPTY_OR_NO_EXPORT"
-        if not n:
-            os.remove(os.path.join(xml_dir, name + ".XML"))
-        logf.write(f"{name}\t{os.path.getsize(fic)}\t{status}\t{n}\t{time.time() - t0:.1f}\n")
-        done.append(name)
-    logf.close()
+                logf.write(line)
+                done.append(name)
     log(f"    native reader: {len(done)} tables in {time.time() - t_all:.0f}s, {len(fallback)} for WDMap")
     return done, fallback
 
 
-def main():
+def main(argv: list[str] | None = None) -> None:
+    """CLI: export, print the fallbacks and write _native_export.json."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("fic_dir")
     ap.add_argument("xml_dir")
     ap.add_argument("--tables", default="")
-    ap.add_argument("--layouts", default=DEFAULT_LAYOUTS)
-    ap.add_argument("--validation", default=DEFAULT_VALIDATION)
-    a = ap.parse_args()
+    ap.add_argument("--layouts", default=str(DEFAULT_LAYOUTS))
+    ap.add_argument("--validation", default=str(DEFAULT_VALIDATION))
+    a = ap.parse_args(argv)
     tables = [t for t in a.tables.split(",") if t]
     done, fb = export(a.fic_dir, a.xml_dir, tables, a.layouts, a.validation)
     for t, why in sorted(fb.items()):
         print(f"fallback {t}: {why}")
-    json.dump({"native": done, "fallback": fb}, open(os.path.join(a.xml_dir, "_native_export.json"), "w"), indent=1)
+    (Path(a.xml_dir) / "_native_export.json").write_text(json.dumps({"native": done, "fallback": fb}, indent=1))
 
 
 if __name__ == "__main__":

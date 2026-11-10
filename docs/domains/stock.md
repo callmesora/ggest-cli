@@ -1,6 +1,6 @@
 # Stock, purchasing & assembly (gGest)
 
-Views in `bi/sql/ext/stock.sql` (apply: `py -m bi build-views --file bi/sql/ext/stock.sql`), saved queries in
+Views in `bi/sql/ext/stock.sql` (apply: `uv run ggest build-views --file bi/sql/ext/stock.sql`), saved queries in
 `bi/queries/stock/`, skills `reorder-suggestions`, `stock-cleanup`, `stock-check`, `supplier-review`.
 Finance keeps `finance_stock_value_by_group`, `finance_dead_stock_items`, `finance_top_suppliers`,
 `finance_purchases_*`, `finance_freight_costs_by_year`.

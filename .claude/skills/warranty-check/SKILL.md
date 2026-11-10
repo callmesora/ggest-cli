@@ -6,17 +6,17 @@ description: Decide if a device or part is under warranty — sold by the shop w
 
 Run from the project root.
 
-1. **One serial**: `py -m bi run_saved_query --name repairs_warranty_check --params '{"serial":"<sn>"}'`
+1. **One serial**: `uv run ggest run_saved_query --name repairs_warranty_check --params '{"serial":"<sn>"}'`
    - No rows → `"exact":0` with a fragment (≥ 5 chars), or look at the history: skill device-history.
    - To check at another date (e.g. the day the order was opened): `"as_of":"YYYY-MM-DD"`.
    - **Customer has no paperwork / serial unknown**: list what was sold to them with serial and warranty end:
-     `py -m bi run_saved_query --name repairs_customer_devices --params '{"customer":"<code or name>"}'`; to search
-     by item or period instead, use the stock query `stock_serials_sold` (`py -m bi saved_queries --search serial`).
-2. **Context**: `py -m bi run_saved_query --name repairs_device_timeline --params '{"serial":"<sn>"}'`
+     `uv run ggest run_saved_query --name repairs_customer_devices --params '{"customer":"<code or name>"}'`; to search
+     by item or period instead, use the stock query `stock_serials_sold` (`uv run ggest saved_queries --search serial`).
+2. **Context**: `uv run ggest run_saved_query --name repairs_device_timeline --params '{"serial":"<sn>"}'`
    (earlier repairs of the same fault, previous RMAs, credit notes).
 3. **Warranty jobs in a period** (orders on devices still under warranty when they came in):
-   `py -m bi run_saved_query --name repairs_warranty_orders --params '{"start":"year_start"}'`
-4. **Supplier RMAs** (gGest RMA module): `py -m bi run_saved_query --name repairs_supplier_rmas --params '{"status":"open"}'`
+   `uv run ggest run_saved_query --name repairs_warranty_orders --params '{"start":"year_start"}'`
+4. **Supplier RMAs** (gGest RMA module): `uv run ggest run_saved_query --name repairs_supplier_rmas --params '{"status":"open"}'`
    and per supplier: `--params '{"grain":"supplier"}'`.
 
 ## Business rules and caveats

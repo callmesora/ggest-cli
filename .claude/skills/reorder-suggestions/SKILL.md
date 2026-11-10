@@ -8,18 +8,18 @@ Run from the project root (bash quoting; in PowerShell 5.1 escape inner quotes a
 
 ## Steps
 1. Candidates (demand of the last 90 days = sales + components used in PC builds − returns; cover target 45 days):
-   `py -m bi run_saved_query --name stock_reorder_suggestions --params '{"days": 90, "target_days": 45, "min_out": 3, "limit": 40}'`
+   `uv run ggest run_saved_query --name stock_reorder_suggestions --params '{"days": 90, "target_days": 45, "min_out": 3, "limit": 40}'`
    - One group only: add `"group": "CONSUM"` (part of the group name: CONSUMÍVEIS, COMPONENTES, REDES…).
    - Slow season / big orders: raise `min_out`; fast-moving consumables: `"days": 60, "target_days": 30`.
    - **Purchase orders per supplier** (one row per supplier: items, units, total `order_value`, item list):
-     `py -m bi run_saved_query --name stock_reorder_suggestions --params '{"group_by": "supplier", "limit": 15}'`
+     `uv run ggest run_saved_query --name stock_reorder_suggestions --params '{"group_by": "supplier", "limit": 15}'`
 2. For the top lines, check that the price did not jump (and who sells it cheaper):
-   `py -m bi run_saved_query --name stock_supplier_best_prices --params '{"months": 12, "limit": 30}'`
-   and, for one item, `py -m bi run_saved_query --name stock_item_purchase_history --params '{"item": "W1350A", "limit": 10}'`.
+   `uv run ggest run_saved_query --name stock_supplier_best_prices --params '{"months": 12, "limit": 30}'`
+   and, for one item, `uv run ggest run_saved_query --name stock_item_purchase_history --params '{"item": "W1350A", "limit": 10}'`.
 3. Recent price increases to pass on to selling prices (`direction` up/down/both; `group_by: supplier` for totals):
-   `py -m bi run_saved_query --name stock_supplier_price_changes --params '{"direction": "up", "limit": 15}'`
+   `uv run ggest run_saved_query --name stock_supplier_price_changes --params '{"direction": "up", "limit": 15}'`
 4. Before ordering a slow/expensive item, confirm the stock card (maybe a return or delivery note is pending):
-   `py -m bi run_saved_query --name stock_item_movements --params '{"item": "<code>", "limit": 15}'`
+   `uv run ggest run_saved_query --name stock_item_movements --params '{"item": "<code>", "limit": 15}'`
 
 ## Reading the numbers
 - `units_out` counts every unit that left stock to customers or into assembled PCs; `customers` = distinct buyers.

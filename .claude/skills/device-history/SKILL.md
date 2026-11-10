@@ -7,15 +7,15 @@ description: Everything about one device or part by serial number — when it wa
 Run from the project root. `<sn>` = serial number as typed on the label or order (case does not matter).
 
 1. **Timeline of the serial** (purchase, sale, credit notes, use as spare part, repair orders, RMAs):
-   `py -m bi run_saved_query --name repairs_device_timeline --params '{"serial":"<sn>"}'`
+   `uv run ggest run_saved_query --name repairs_device_timeline --params '{"serial":"<sn>"}'`
    - No rows → try a fragment: `"serial":"<part>","exact":0` (min 5 chars). Serials are often typed with or
      without dashes/prefixes (e.g. `S/N`, the product code + `/`).
    - Need the technician's notes for this device? add `"show_notes":1` (diagnosis and work done, 200 chars each).
 2. **Warranty status** of the same serial (see skill warranty-check for details):
-   `py -m bi run_saved_query --name repairs_warranty_check --params '{"serial":"<sn>"}'`
+   `uv run ggest run_saved_query --name repairs_warranty_check --params '{"serial":"<sn>"}'`
 3. **All serial-numbered items sold to a customer** (+ devices they only brought for repair), code or name fragment
    (accent-sensitive; a fragment matches every customer code with that name):
-   `py -m bi run_saved_query --name repairs_customer_devices --params '{"customer":"<code or name>"}'`
+   `uv run ggest run_saved_query --name repairs_customer_devices --params '{"customer":"<code or name>"}'`
    `source=sold_here` = every serial on a valid (not cancelled, not credited) sale to that customer since 2017, with
    warranty end; then step 1 for the interesting serials. Items sold without a serial are not listed (see
    `customers_devices` for purchases by product family).

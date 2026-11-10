@@ -7,21 +7,21 @@ description: Tax and accounting calendar from gGest — upcoming obligations (SA
 Run from the project root.
 
 ## Steps
-1. Upcoming obligations: `py -m bi run_saved_query --name finance_tax_calendar` — the next due date of each
+1. Upcoming obligations: `uv run ggest run_saved_query --name finance_tax_calendar` — the next due date of each
    obligation (status upcoming / due_today) plus the ones passed in the last 15 days and not marked done
    (status past_due_not_marked_done, listed first). Every occurrence in a window:
    `--params '{"mode":"all","days_ahead":60,"days_back":15}'`. The list is gGest's obligations calendar
    (Expediente > Obrigações).
 2. VAT for the period to declare (quarterly by default; `"granularity":"month"` for monthly filers):
-   `py -m bi run_saved_query --name finance_vat_by_period --params '{"start":"2026-07-01","end":"2026-09-30"}'`
+   `uv run ggest run_saved_query --name finance_vat_by_period --params '{"start":"2026-07-01","end":"2026-09-30"}'`
    → base and VAT per rate for sales (output) and purchases/overheads (input), and a NET row (positive = to pay).
-3. Current quarter estimate: `py -m bi run_saved_query --name finance_vat_quarter_projection`
+3. Current quarter estimate: `uv run ggest run_saved_query --name finance_vat_quarter_projection`
    (quarter-to-date, linear projection by days, seasonal projection from last year's same quarter, last year's actual).
-   Year view: `py -m bi run_saved_query --name finance_vat_by_year`.
+   Year view: `uv run ggest run_saved_query --name finance_vat_by_year`.
 4. Invoices the tax authority has but gGest does not (missing input VAT):
-   `py -m bi run_saved_query --name finance_efatura_unmatched` (only the periods imported from e-fatura).
+   `uv run ggest run_saved_query --name finance_efatura_unmatched` (only the periods imported from e-fatura).
 5. Payroll, social security and taxes actually paid:
-   `py -m bi run_saved_query --name finance_payments_made --params '{"party_type":"creditor"}'`.
+   `uv run ggest run_saved_query --name finance_payments_made --params '{"party_type":"creditor"}'`.
 
 ## Rules and traps
 - VAT figures are **indicative** (built from gGest documents): reverse charge on intra-EU purchases (regime

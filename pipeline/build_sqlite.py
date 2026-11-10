@@ -9,112 +9,171 @@
 
 Usage: py build_sqlite.py <xml_dir> <data_dir with .fic/.mmo> <out_dir> [--no-memos] [--only-exported]
 """
-import glob, html, os, re, sqlite3, sys, hashlib
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from hfsql_mmo import Mmo, first_blocks, parse
 
 import argparse
-ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-ap.add_argument("xml_dir"); ap.add_argument("data_dir"); ap.add_argument("out_dir")
-ap.add_argument("--no-memos", action="store_true", help="skip .mmo extraction (fast build)")
-ap.add_argument("--only-exported", action="store_true", help="only tables that have an XML export")
-args = ap.parse_args()
-xml_dir, data_dir, out_dir = args.xml_dir, args.data_dir, args.out_dir
-os.makedirs(out_dir, exist_ok=True)
-final_path = os.path.join(out_dir, "data.sqlite")
-db_path = final_path + ".building"   # swapped in at the end, so readers never see a half-built file
-if os.path.exists(db_path):
-    os.remove(db_path)
-db = sqlite3.connect(db_path)
-db.execute("CREATE TABLE _tables(name TEXT PRIMARY KEY, rows INTEGER, columns INTEGER, export_status TEXT, fic_bytes INTEGER)")
-db.execute("CREATE TABLE _memo_files(tbl TEXT, rec INTEGER, item INTEGER, kind TEXT, ext TEXT, original_name TEXT, path TEXT, bytes INTEGER, sha1 TEXT)")
-db.execute("CREATE TABLE _memo_texts(tbl TEXT, rec INTEGER, item INTEGER, text TEXT)")
+import hashlib
+import sqlite3
+import struct
+import sys
+from pathlib import Path
+from typing import Any
 
-# export log (status per table)
-status = {}
-for lp in glob.glob(os.path.join(xml_dir, "_log_worker*.tsv")):
-    for line in open(lp, encoding="utf-8"):
-        parts = line.rstrip("\n").split("\t")
-        if len(parts) >= 3:
-            name = parts[0].lstrip("﻿")
-            # a retry may log the same table again: a success wins over an earlier failure
-            if status.get(name) != "OK":
-                status[name] = parts[2]
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent))
+from fic_reader import fic_files  # noqa: E402
+from hfsql_mmo import Mmo, first_blocks, parse  # noqa: E402
+from xmlrows import export_statuses, rows_of  # noqa: E402
 
-from xmlrows import rows_of
+from bi import db as bidb  # noqa: E402
+
+BATCH = 5000
+MEMO_HEADER = 0xD2  # a .mmo of this size or less holds no memos
+META = [
+    "CREATE TABLE _tables(name TEXT PRIMARY KEY, rows INTEGER, columns INTEGER, export_status TEXT, fic_bytes INTEGER)",
+    (
+        "CREATE TABLE _memo_files(tbl TEXT, rec INTEGER, item INTEGER, kind TEXT, ext TEXT, original_name TEXT, "
+        "path TEXT, bytes INTEGER, sha1 TEXT)"
+    ),
+    "CREATE TABLE _memo_texts(tbl TEXT, rec INTEGER, item INTEGER, text TEXT)",
+]
 
 
-def q(n):
+def q(n: str) -> str:
+    """Quote an SQL identifier."""
     return '"' + n.replace('"', '""') + '"'
 
 
-fics = {os.path.splitext(os.path.basename(p))[0]: p for p in glob.glob(os.path.join(data_dir, "*.fic")) + glob.glob(os.path.join(data_dir, "*.FIC"))}
-for name in sorted(fics, key=str.lower):
-    xml = os.path.join(xml_dir, name + ".XML")
-    if args.only_exported and not os.path.exists(xml):
-        continue
-    cols, n = [], 0
-    if os.path.exists(xml):
-        # columns are added as they are first seen
-        db.execute(f"CREATE TABLE {q(name)} (_row INTEGER PRIMARY KEY)")
-        rows = []
-        for row in rows_of(xml, name):
-            for c, _ in row:
-                if c not in cols:
-                    cols.append(c)
-                    db.execute(f"ALTER TABLE {q(name)} ADD COLUMN {q(c)} TEXT")
-            n += 1
-            d = dict(row)
-            rows.append([n] + [d.get(c) for c in cols])
-            if len(rows) >= 5000:
-                db.executemany(f"INSERT INTO {q(name)} (_row, {', '.join(map(q, cols))}) VALUES ({', '.join('?' * (len(cols) + 1))})",
-                               [r + [None] * (len(cols) + 1 - len(r)) for r in rows])
-                rows = []
-        if rows:
-            db.executemany(f"INSERT INTO {q(name)} (_row, {', '.join(map(q, cols))}) VALUES ({', '.join('?' * (len(cols) + 1))})",
-                           [r + [None] * (len(cols) + 1 - len(r)) for r in rows])
-    db.execute("INSERT INTO _tables VALUES (?,?,?,?,?)", (name, n, len(cols), status.get(name, "not exported"), os.path.getsize(fics[name])))
+class TableLoader:
+    """Loads one XML export into a table; columns are added as they are first seen."""
 
-    # memos
-    mmo = os.path.splitext(fics[name])[0] + ".mmo"
-    if not args.no_memos and os.path.exists(mmo) and os.path.getsize(mmo) > 0xD2:
-        m = Mmo(mmo)
+    def __init__(self, db: sqlite3.Connection, name: str) -> None:
+        self.db, self.name = db, name
+        self.cols: list[str] = []
+        self.rows: list[list[Any]] = []
+        self.n = 0
+        db.execute(f"CREATE TABLE {q(name)} (_row INTEGER PRIMARY KEY)")
+
+    def add(self, row: list[tuple[str, str]]) -> None:
+        """Queue one exported row (flushed every BATCH rows)."""
+        for c, _ in row:
+            if c not in self.cols:
+                self.cols.append(c)
+                self.db.execute(f"ALTER TABLE {q(self.name)} ADD COLUMN {q(c)} TEXT")
+        self.n += 1
+        d = dict(row)
+        self.rows.append([self.n] + [d.get(c) for c in self.cols])
+        if len(self.rows) >= BATCH:
+            self.flush()
+
+    def flush(self) -> None:
+        """Insert the queued rows (short rows padded with NULL)."""
+        if not self.rows:
+            return
+        width = len(self.cols) + 1
+        sql = f"INSERT INTO {q(self.name)} (_row, {', '.join(map(q, self.cols))}) VALUES ({', '.join('?' * width)})"
+        self.db.executemany(sql, [r + [None] * (width - len(r)) for r in self.rows])
+        self.rows = []
+
+
+def load_table(db: sqlite3.Connection, name: str, xml: Path) -> tuple[int, int]:
+    """Create and fill the table from its XML export; returns (rows, columns)."""
+    loader = TableLoader(db, name)
+    for row in rows_of(xml, name):
+        loader.add(row)
+    loader.flush()
+    return loader.n, len(loader.cols)
+
+
+def store_binary(db: sqlite3.Connection, name: str, head: int, r: dict[str, Any], out_dir: Path) -> None:
+    """Write a binary memo to memo_files/<table>/ and list it in _memo_files."""
+    orig = r["names"][0] or r["names"][1]
+    rec = r.get("rec")
+    sub = out_dir / "memo_files" / name
+    sub.mkdir(parents=True, exist_ok=True)
+    p = sub / f"rec{rec if rec is not None else 'NA'}_item{r['item']}_off{head:x}.{r['ext']}"
+    p.write_bytes(r["data"])
+    db.execute("INSERT INTO _memo_files VALUES (?,?,?,?,?,?,?,?,?)",
+               (name, rec, r["item"], r["kind"], r["ext"], orig, str(p.relative_to(out_dir)), len(r["data"]),
+                hashlib.sha1(r["data"], usedforsecurity=False).hexdigest()))  # fmt: skip
+
+
+def memo_heads(name: str, m: Mmo) -> list[int]:
+    """First blocks of every memo (none if the file cannot be walked)."""
+    try:
+        return first_blocks(m)
+    except ValueError as e:
+        print(name, "memo walk error", e)
+        return []
+
+
+def load_memos(db: sqlite3.Connection, name: str, mmo: Path, out_dir: Path) -> None:
+    """Texts into _memo_texts, binaries to files listed in _memo_files."""
+    m = Mmo(mmo)
+    for h in memo_heads(name, m):
         try:
-            heads = first_blocks(m)
-        except ValueError as e:
-            print(name, "memo walk error", e)
-            heads = []
-        for h in heads:
-            try:
-                r = parse(m.raw(h))
-            except Exception as e:
-                print(name, "memo error", hex(h), e)
-                continue
-            if r["kind"] == "text":
-                db.execute("INSERT INTO _memo_texts VALUES (?,?,?,?)", (name, r.get("rec"), r.get("item"), r["text"]))
-            elif r["kind"] == "binary" and r["data"]:
-                orig = r["names"][0] or r["names"][1]
-                rec = r.get("rec")
-                sub = os.path.join(out_dir, "memo_files", name)
-                os.makedirs(sub, exist_ok=True)
-                fn = f"rec{rec if rec is not None else 'NA'}_item{r['item']}_off{h:x}.{r['ext']}"
-                p = os.path.join(sub, fn)
-                with open(p, "wb") as f:
-                    f.write(r["data"])
-                db.execute("INSERT INTO _memo_files VALUES (?,?,?,?,?,?,?,?,?)",
-                           (name, rec, r["item"], r["kind"], r["ext"], orig, os.path.relpath(p, out_dir), len(r["data"]),
-                            hashlib.sha1(r["data"]).hexdigest()))
+            r = parse(m.raw(h))
+        except (ValueError, struct.error) as e:
+            print(name, "memo error", hex(h), e)
+            continue
+        if r["kind"] == "text":
+            db.execute("INSERT INTO _memo_texts VALUES (?,?,?,?)", (name, r.get("rec"), r.get("item"), r["text"]))
+        elif r["kind"] == "binary" and r["data"]:
+            store_binary(db, name, h, r, out_dir)
+
+
+def build_tables(db: sqlite3.Connection, xml_dir: Path, data_dir: Path, out_dir: Path, args) -> None:
+    """One table per .fic (only exported ones with --only-exported), plus its memos."""
+    status = export_statuses(xml_dir)
+    fics = fic_files(data_dir)
+    for name in sorted(fics, key=str.lower):
+        xml = xml_dir / f"{name}.XML"
+        if args.only_exported and not xml.exists():
+            continue
+        n, ncols = load_table(db, name, xml) if xml.exists() else (0, 0)
+        fic = fics[name]
+        db.execute("INSERT INTO _tables VALUES (?,?,?,?,?)",
+                   (name, n, ncols, status.get(name, "not exported"), fic.stat().st_size))  # fmt: skip
+        mmo = fic.with_suffix(".mmo")
+        if not args.no_memos and mmo.exists() and mmo.stat().st_size > MEMO_HEADER:
+            load_memos(db, name, mmo, out_dir)
+        db.commit()
+        print(f"{name}\t{n}\t{ncols}", flush=True)
+
+
+def build_views(db_path: Path) -> None:
+    """Business views (config from ggest.json next to the database, bi/sql/semantic.sql, bi/sql/ext/*.sql)."""
+    bidb.set_db(str(db_path))
+    try:
+        bidb.build_views()
+    except (sqlite3.Error, RuntimeError) as e:  # partial export (e.g. a test with a few tables)
+        print("business views skipped:", e)
+
+
+def main(argv: list[str] | None = None) -> None:
+    """CLI: build <out_dir>/data.sqlite, swapped in only when complete."""
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("xml_dir")
+    ap.add_argument("data_dir")
+    ap.add_argument("out_dir")
+    ap.add_argument("--no-memos", action="store_true", help="skip .mmo extraction (fast build)")
+    ap.add_argument("--only-exported", action="store_true", help="only tables that have an XML export")
+    args = ap.parse_args(argv)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    final_path = out_dir / "data.sqlite"
+    db_path = out_dir / "data.sqlite.building"  # swapped in at the end: readers never see a half-built file
+    db_path.unlink(missing_ok=True)
+    db = sqlite3.connect(db_path)
+    for sql in META:
+        db.execute(sql)
+    build_tables(db, Path(args.xml_dir), Path(args.data_dir), out_dir, args)
     db.commit()
-    print(f"{name}\t{n}\t{len(cols)}", flush=True)
-db.commit()
-db.close()
-# business views (config from ggest.json next to the database, bi/sql/semantic.sql, bi/sql/ext/*.sql)
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from bi import db as bidb  # noqa: E402
-bidb.set_db(db_path)
-try:
-    bidb.build_views()
-except (sqlite3.Error, RuntimeError) as e:   # partial export (e.g. a test with a few tables)
-    print("business views skipped:", e)
-os.replace(db_path, final_path)
-print("done", final_path)
+    db.close()
+    build_views(db_path)
+    db_path.replace(final_path)
+    print("done", final_path)
+
+
+if __name__ == "__main__":
+    main()

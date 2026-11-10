@@ -34,24 +34,42 @@ Item encodings (values are formatted exactly like WDMap's XML export):
 Usage:
   py fic_reader.py <table.fic> [--layouts layouts/ggest_layouts.json] [--limit 5] [--xml out.XML]
 """
+
 import argparse
 import codecs
+import hashlib
 import json
-import os
+import math
 import struct
 import sys
+from collections.abc import Callable, Iterable, Iterator
 from decimal import Decimal
+from pathlib import Path
+from typing import Any
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
-DEFAULT_LAYOUTS = os.path.join(HERE, "layouts", "ggest_layouts.json")
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+from hfsql_mmo import Mmo, parse  # noqa: E402
+
+DEFAULT_LAYOUTS = HERE / "layouts" / "ggest_layouts.json"
 
 Z4, Z8, FF8 = bytes(4), bytes(8), b"\xff" * 8
 ACTIVE = 0x10
+SLOT_STATUS = (0x10, 0x80)  # active, deleted/free
+NO_MEMO = (0, 0xFFFFFFFFFFFFFFFF)
+MIN_STRIDE = 8
+CONTROL_BLOCK = 44  # bytes of the control block before record 0
+I64_SIZE = 8
+STR_PROBE = 4096  # bytes searched for the NUL of a string item of unknown width
+EMPTY_DT8 = "00000000000000000"
+
+Framing = dict[str, int]
+Layout = dict[str, Any]
+Decoder = Callable[[bytes], str | None]
 
 
 # ---------------------------------------------------------------- framing
-def _divisors(n):
+def _divisors(n: int) -> list[int]:
     out, i = set(), 1
     while i * i <= n:
         if n % i == 0:
@@ -61,306 +79,351 @@ def _divisors(n):
     return sorted(out)
 
 
-def frame_candidates(data, stride=None, limit=0x20000):
+def _control_block(data: bytes, p: int) -> tuple[int, int] | None:
+    """(high-water mark, active count) if a control block ends at p, else None."""
+    fh = data[p - 8 : p]
+    if fh != FF8 and (fh[4:] != Z4 or fh == Z8):
+        return None
+    if data[p - 36 : p - 32] != Z4 or data[p - 12 : p - 8] != Z4:
+        return None
+    return struct.unpack_from("<II", data, p - CONTROL_BLOCK)
+
+
+def _stride_at(data: bytes, p: int, cnt: int, strides: Iterable[int]) -> int | None:
+    """First stride whose slots after record 0 hold exactly cnt active records."""
+    size = len(data)
+    span = size - p
+    for s in strides:
+        if s < MIN_STRIDE or span % s or span // s - 1 < cnt:
+            continue
+        if data[size - s] not in SLOT_STATUS or data[p + s] not in SLOT_STATUS:
+            continue
+        if data[p + s :: s].count(ACTIVE) == cnt:
+            return s
+    return None
+
+
+def _framing_at(data: bytes, p: int, stride: int | None) -> Framing | None:
+    """The framing with record 0 at p, if the control block and the record statuses agree."""
+    cb = _control_block(data, p)
+    if cb is None:
+        return None
+    hw, cnt = cb
+    span = len(data) - p
+    if cnt * 8 > span or hw < cnt:
+        return None
+    if cnt == 0:  # empty table: only record 0
+        return {"rec0": p, "stride": stride, "slots": 0, "count": 0} if stride and span == stride else None
+    s = _stride_at(data, p, cnt, [stride] if stride else _divisors(span))
+    return None if s is None else {"rec0": p, "stride": s, "slots": span // s - 1, "count": cnt}
+
+
+def frame_candidates(data: bytes, stride: int | None = None, limit: int = 0x20000) -> list[Framing]:
     """All self-consistent (rec0, stride) framings: the control block's active-record count
     must equal the number of slots whose status byte is 0x10."""
-    L = len(data)
-    found = []
-    for p in range(0x60, min(L, limit)):
-        fh = data[p - 8:p]
-        if fh != FF8 and (fh[4:] != Z4 or fh == Z8):
-            continue
-        if data[p - 36:p - 32] != Z4 or data[p - 12:p - 8] != Z4:
-            continue
-        hw, cnt = struct.unpack_from("<II", data, p - 44)
-        span = L - p
-        if cnt * 8 > span or hw < cnt:
-            continue
-        if cnt == 0:
-            if stride and span == stride:      # empty table: only record 0
-                found.append({"rec0": p, "stride": stride, "slots": 0, "count": 0})
-            continue
-        for s in ([stride] if stride else _divisors(span)):
-            if s < 8 or span % s or span // s - 1 < cnt:
-                continue
-            if data[L - s] not in (0x10, 0x80) or data[p + s] not in (0x10, 0x80):
-                continue
-            if data[p + s::s].count(ACTIVE) == cnt:
-                found.append({"rec0": p, "stride": s, "slots": span // s - 1, "count": cnt})
-                break
-    return found
+    found = (_framing_at(data, p, stride) for p in range(0x60, min(len(data), limit)))
+    return [f for f in found if f is not None]
 
 
-def frame(data, stride=None, rec0=None):
+def frame(data: bytes, stride: int | None = None, rec0: int | None = None) -> Framing | None:
     """Best framing; with a known stride (from the layout) this is fast."""
     if rec0 is not None and stride:
-        L = len(data)
-        if rec0 < L and (L - rec0) % stride == 0 and rec0 >= 44:
+        size = len(data)
+        if rec0 < size and (size - rec0) % stride == 0 and rec0 >= CONTROL_BLOCK:
             cnt = struct.unpack_from("<I", data, rec0 - 40)[0]
-            if data[rec0 + stride::stride].count(ACTIVE) == cnt:
-                return {"rec0": rec0, "stride": stride, "slots": (L - rec0) // stride - 1, "count": cnt}
+            if data[rec0 + stride :: stride].count(ACTIVE) == cnt:
+                return {"rec0": rec0, "stride": stride, "slots": (size - rec0) // stride - 1, "count": cnt}
     c = frame_candidates(data, stride)
     return c[0] if c else None
 
 
-def active_records(data, fr):
+def active_records(data: bytes, fr: Framing) -> Iterator[tuple[int, bytes]]:
+    """(record number, record bytes) of every active slot."""
     p, s = fr["rec0"], fr["stride"]
     for i in range(1, fr["slots"] + 1):
         o = p + s * i
         if data[o] == ACTIVE:
-            yield i, data[o:o + s]
+            yield i, data[o : o + s]
 
 
 # ---------------------------------------------------------------- value formatting
-def fmt_decimal(d):
+def _strip_fraction(s: str) -> str:
+    return s.rstrip("0").rstrip(".") if "." in s else s
+
+
+def fmt_decimal(d: Decimal) -> str:
     """Decimal -> WDMap text: no exponent, no trailing zeros, '0' for zero."""
     if not d:
         return "0"
-    s = format(d.normalize(), "f")
-    if "." in s:
-        s = s.rstrip("0").rstrip(".")
-    return s
+    return _strip_fraction(format(d.normalize(), "f"))
 
 
-def fmt_float(x):
+def fmt_float(x: float) -> str:
+    """f64 -> shortest repr, without exponent or a trailing '.0'."""
     if x == 0:
         return "0"
-    if x != x or x in (float("inf"), float("-inf")):
+    if not math.isfinite(x):
         return str(x)
     s = repr(x)
     if "e" in s or "E" in s:
         s = format(Decimal(s), "f")
-    if s.endswith(".0"):
-        s = s[:-2]
-    return s
+    return s.removesuffix(".0")
 
 
-def fmt_float15(x):
+def _fmt_general(x: float, digits: int) -> str:
     if x == 0:
         return "0"
-    s = "%.15g" % x
+    s = f"{x:.{digits}g}"
     if "e" in s:
         s = format(Decimal(s), "f")
-    if "." in s:
-        s = s.rstrip("0").rstrip(".")
-    return s
+    return _strip_fraction(s)
 
 
-def fmt_float32(x):
-    if x == 0:
-        return "0"
-    s = "%.7g" % x
-    if "e" in s:
-        s = format(Decimal(s), "f")
-    if "." in s:
-        s = s.rstrip("0").rstrip(".")
-    return s
+def fmt_float15(x: float) -> str:
+    """f64 with 15 significant digits."""
+    return _fmt_general(x, 15)
 
 
-_POW = {k: Decimal(10) ** k for k in range(0, 39)}
+def fmt_float32(x: float) -> str:
+    """f32 with 7 significant digits."""
+    return _fmt_general(x, 7)
+
+
+def _fmt_hms(ms: int) -> str:
+    h, r = divmod(ms, 3600000)
+    mi, r = divmod(r, 60000)
+    s, ms = divmod(r, 1000)
+    return f"{h:02d}{mi:02d}{s:02d}{ms:03d}"
+
+
+def _fmt_dt8(d: int, m: int, y: int, ms: int) -> str:
+    if not (d or m or y or ms):
+        return EMPTY_DT8
+    return f"{y:04d}{m:02d}{d:02d}{_fmt_hms(ms)}"
+
+
+_POW = {k: Decimal(10) ** k for k in range(39)}
+_IPOW = {k: 10**k for k in range(39)}
+_INT_FMT = {"u8": "<B", "i8": "<b", "i16": "<h", "u16": "<H", "i32": "<i", "u32": "<I", "i64": "<q", "u64": "<Q"}
 
 FIXED = {  # type -> size
     "u8": 1, "i8": 1, "i16": 2, "u16": 2, "i32": 4, "u32": 4, "i64": 8, "u64": 8,
     "f32": 4, "f64": 8, "f64g": 8, "date4": 4, "dt8": 8, "time4": 4, "memo": 8, "bmemo": 8, "uuid16": 16,
-}
-for _k in range(0, 39):
+}  # fmt: skip
+for _k in range(39):
     FIXED[f"cur{_k}"] = 8
     for _n in (2, 3, 4, 5, 6, 7, 8, 16):
         FIXED[f"dec{_n}_{_k}"] = _n
 
 
-def size_of_type(typ):
-    return FIXED[typ]
+def fixed_point_spec(typ: str) -> tuple[int, int]:
+    """(bytes, decimals) of a cur<k> / dec<n>_<k> type."""
+    if typ.startswith("cur"):
+        return 8, int(typ[3:])
+    n, k = typ[3:].split("_")
+    return int(n), int(k)
 
 
-def size_of(col):
+def size_of(col: Layout) -> int:
+    """Width of a layout column in the record."""
     return col["size"] if col["type"] in ("str", "ustr") else FIXED[col["type"]]
 
 
-def decode(rec, o, typ, size=0, memo=None):
-    """Decode one item. Returns the WDMap-formatted string, or None if it cannot be decoded."""
-    if typ == "str":
-        b = rec[o:o + size] if size else rec[o:o + 4096]
-        z = b.find(0)
-        if z < 0:
-            if not size:
-                return None
-            z = len(b)
-        return b[:z].decode("cp1252", "replace")
-    if typ == "ustr":
-        b = rec[o:o + size]
-        for i in range(0, len(b) - 1, 2):
-            if b[i] == 0 and b[i + 1] == 0:
-                b = b[:i]
-                break
-        return b.decode("utf-16-le", "replace")
-    if typ == "u8":
-        return str(rec[o])
-    if typ == "i8":
-        return str(struct.unpack_from("<b", rec, o)[0])
-    if typ == "i16":
-        return str(struct.unpack_from("<h", rec, o)[0])
-    if typ == "u16":
-        return str(struct.unpack_from("<H", rec, o)[0])
-    if typ == "i32":
-        return str(struct.unpack_from("<i", rec, o)[0])
-    if typ == "u32":
-        return str(struct.unpack_from("<I", rec, o)[0])
-    if typ == "i64":
-        return str(struct.unpack_from("<q", rec, o)[0])
-    if typ == "u64":
-        return str(struct.unpack_from("<Q", rec, o)[0])
-    if typ.startswith("dec"):
-        n, k = typ[3:].split("_")
-        v = int.from_bytes(rec[o:o + int(n)], "little", signed=True)
-        return fmt_decimal(Decimal(v) / _POW[int(k)])
+# ---------------------------------------------------------------- decoding
+def _dec_str(rec: bytes, o: int, size: int, _memo: "MemoFile | None") -> str | None:
+    b = rec[o : o + size] if size else rec[o : o + STR_PROBE]
+    z = b.find(0)
+    if z < 0:
+        if not size:
+            return None
+        z = len(b)
+    return b[:z].decode("cp1252", "replace")
+
+
+def _dec_ustr(rec: bytes, o: int, size: int, _memo: "MemoFile | None") -> str:
+    b = rec[o : o + size]
+    for i in range(0, len(b) - 1, 2):
+        if b[i] == 0 and b[i + 1] == 0:
+            b = b[:i]
+            break
+    return b.decode("utf-16-le", "replace")
+
+
+def _dec_u8(rec: bytes, o: int, _size: int, _memo: "MemoFile | None") -> str:
+    return str(rec[o])
+
+
+def _int_decoder(fmt: str) -> Callable[..., str]:
+    up = struct.Struct(fmt).unpack_from
+    return lambda rec, o, _size, _memo: str(up(rec, o)[0])
+
+
+def _dec_fixed_point(rec: bytes, o: int, typ: str) -> str:
+    n, k = fixed_point_spec(typ)
     if typ.startswith("cur"):
         v = struct.unpack_from("<q", rec, o)[0]
-        return fmt_decimal(Decimal(v) / _POW[int(typ[3:])])
-    if typ == "f64":
-        return fmt_float(struct.unpack_from("<d", rec, o)[0])
-    if typ == "f64g":
-        return fmt_float15(struct.unpack_from("<d", rec, o)[0])
-    if typ == "f32":
-        return fmt_float32(struct.unpack_from("<f", rec, o)[0])
-    if typ == "date4":
-        d, m, y = struct.unpack_from("<BBH", rec, o)
-        if not (d or m or y):
-            return ""
-        return f"{y:04d}{m:02d}{d:02d}"
-    if typ == "dt8":
-        d, m, y, ms = struct.unpack_from("<BBHI", rec, o)
-        if not (d or m or y or ms):
-            return "00000000000000000"
-        h, r = divmod(ms, 3600000)
-        mi, r = divmod(r, 60000)
-        s, ms = divmod(r, 1000)
-        return f"{y:04d}{m:02d}{d:02d}{h:02d}{mi:02d}{s:02d}{ms:03d}"
-    if typ == "uuid16":
-        b = rec[o:o + 16]
-        if not any(b):
-            return ""
-        h = b.hex()
-        return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:]}"
-    if typ == "time4":
-        ms = struct.unpack_from("<I", rec, o)[0]
-        h, r = divmod(ms, 3600000)
-        mi, r = divmod(r, 60000)
-        s, ms = divmod(r, 1000)
-        return f"{h:02d}{mi:02d}{s:02d}{ms:03d}"
-    if typ == "memo":
-        ptr = struct.unpack_from("<Q", rec, o)[0]
-        if ptr in (0, 0xFFFFFFFFFFFFFFFF):
-            return ""
-        if memo is None:
-            return None
-        return memo.text(ptr)
+    else:
+        v = int.from_bytes(rec[o : o + n], "little", signed=True)
+    return fmt_decimal(Decimal(v) / _POW[k])
+
+
+def _dec_date4(rec: bytes, o: int, _size: int, _memo: "MemoFile | None") -> str:
+    d, m, y = struct.unpack_from("<BBH", rec, o)
+    return f"{y:04d}{m:02d}{d:02d}" if d or m or y else ""
+
+
+def _dec_dt8(rec: bytes, o: int, _size: int, _memo: "MemoFile | None") -> str:
+    return _fmt_dt8(*struct.unpack_from("<BBHI", rec, o))
+
+
+def _dec_uuid16(rec: bytes, o: int, _size: int, _memo: "MemoFile | None") -> str:
+    b = rec[o : o + 16]
+    if not any(b):
+        return ""
+    h = b.hex()
+    return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:]}"
+
+
+def _dec_time4(rec: bytes, o: int, _size: int, _memo: "MemoFile | None") -> str:
+    return _fmt_hms(struct.unpack_from("<I", rec, o)[0])
+
+
+def _dec_memo(rec: bytes, o: int, _size: int, memo: "MemoFile | None") -> str | None:
+    ptr = struct.unpack_from("<Q", rec, o)[0]
+    if ptr in NO_MEMO:
+        return ""
+    return None if memo is None else memo.text(ptr)
+
+
+def _float_decoder(fmt: str, show: Callable[[float], str]) -> Callable[..., str]:
+    return lambda rec, o, _size, _memo: show(struct.unpack_from(fmt, rec, o)[0])
+
+
+_DECODERS: dict[str, Callable[..., str | None]] = {
+    "str": _dec_str,
+    "ustr": _dec_ustr,
+    **{t: _int_decoder(f) for t, f in _INT_FMT.items()},
+    "u8": _dec_u8,
+    "f64": _float_decoder("<d", fmt_float),
+    "f64g": _float_decoder("<d", fmt_float15),
+    "f32": _float_decoder("<f", fmt_float32),
+    "date4": _dec_date4,
+    "dt8": _dec_dt8,
+    "uuid16": _dec_uuid16,
+    "time4": _dec_time4,
+    "memo": _dec_memo,
+}
+
+
+def decode(rec: bytes, o: int, typ: str, size: int = 0, memo: "MemoFile | None" = None) -> str | None:
+    """Decode one item. Returns the WDMap-formatted string, or None if it cannot be decoded."""
+    f = _DECODERS.get(typ)
+    if f is not None:
+        return f(rec, o, size, memo)
+    if typ.startswith(("dec", "cur")):
+        return _dec_fixed_point(rec, o, typ)
     raise ValueError(typ)
 
 
-def _fmt_scaled(v, k):
+def _fmt_scaled(v: int, k: int) -> str:
     """Integer v / 10^k formatted like WDMap (no exponent, no trailing zeros)."""
     if k == 0 or v == 0:
         return str(v)
+    sign = "-" if v < 0 else ""
     q, r = divmod(abs(v), _IPOW[k])
     if not r:
-        return ("-" if v < 0 else "") + str(q)
+        return sign + str(q)
     frac = str(r).rjust(k, "0").rstrip("0")
-    return ("-" if v < 0 else "") + f"{q}.{frac}"
+    return f"{sign}{q}.{frac}"
 
 
-_IPOW = {k: 10 ** k for k in range(0, 39)}
-_INT_FMT = {"u8": "<B", "i8": "<b", "i16": "<h", "u16": "<H", "i32": "<i", "u32": "<I", "i64": "<q", "u64": "<Q"}
+def _compile_str(o: int, size: int) -> Decoder:
+    end = o + size
+
+    def f(r: bytes) -> str:
+        b = r[o:end]
+        z = b.find(0)
+        return (b if z < 0 else b[:z]).decode("cp1252", "replace")
+
+    return f
 
 
-def compile_decoder(typ, o, size=0, memo=None):
+def _compile_fixed_point(typ: str, o: int) -> Decoder:
+    n, k = fixed_point_spec(typ)
+    if n == I64_SIZE:
+        up = struct.Struct("<q").unpack_from
+        return lambda r: _fmt_scaled(up(r, o)[0], k)
+    end = o + n
+    return lambda r: _fmt_scaled(int.from_bytes(r[o:end], "little", signed=True), k)
+
+
+def _compile_dt8(o: int) -> Decoder:
+    up = struct.Struct("<BBHI").unpack_from
+    return lambda r: _fmt_dt8(*up(r, o))
+
+
+def compile_decoder(typ: str, o: int, size: int = 0, memo: "MemoFile | None" = None) -> Decoder:
     """Fast decoder for one item: f(record bytes) -> WDMap-formatted string (or None)."""
     if typ == "str":
-        end = o + size
-
-        def f(r):
-            b = r[o:end]
-            z = b.find(0)
-            return (b if z < 0 else b[:z]).decode("cp1252", "replace")
-        return f
+        return _compile_str(o, size)
     if typ in _INT_FMT:
         up = struct.Struct(_INT_FMT[typ]).unpack_from
         return lambda r: str(up(r, o)[0])
-    if typ.startswith("cur") or typ.startswith("dec"):
-        if typ.startswith("cur"):
-            n, k = 8, int(typ[3:])
-        else:
-            n, k = (int(x) for x in typ[3:].split("_"))
-        end = o + n
-        if n == 8:
-            up = struct.Struct("<q").unpack_from
-            return lambda r: _fmt_scaled(up(r, o)[0], k)
-        return lambda r: _fmt_scaled(int.from_bytes(r[o:end], "little", signed=True), k)
+    if typ.startswith(("cur", "dec")):
+        return _compile_fixed_point(typ, o)
     if typ == "dt8":
-        up = struct.Struct("<BBHI").unpack_from
-
-        def f(r):
-            d, m, y, ms = up(r, o)
-            if not (d or m or y or ms):
-                return "00000000000000000"
-            h, x = divmod(ms, 3600000)
-            mi, x = divmod(x, 60000)
-            s, x = divmod(x, 1000)
-            return f"{y:04d}{m:02d}{d:02d}{h:02d}{mi:02d}{s:02d}{x:03d}"
-        return f
+        return _compile_dt8(o)
     return lambda r: decode(r, o, typ, size, memo)
 
 
 class MemoFile:
     """Text memos of one table, read lazily from the .mmo through record pointers."""
 
-    def __init__(self, path):
+    MIN_SIZE = 0xD2  # header only: no memos
+
+    def __init__(self, path: str | Path | None) -> None:
         self.path = path
-        self.m = None
-        self.cache = {}
-        if path and os.path.exists(path) and os.path.getsize(path) > 0xD2:
-            from hfsql_mmo import Mmo
+        self.m: Mmo | None = None
+        self.cache: dict[int, str | None] = {}
+        if path and Path(path).exists() and Path(path).stat().st_size > self.MIN_SIZE:
             self.m = Mmo(path)
 
-    def text(self, ptr):
-        if ptr in self.cache:
-            return self.cache[ptr]
-        t = None
-        if self.m is not None and ptr < self.m.size:
-            try:
-                from hfsql_mmo import parse
-                r = parse(self.m.raw(ptr))
-                if r["kind"] == "text":
-                    t = r["text"]
-            except Exception:
-                t = None
-        self.cache[ptr] = t
-        return t
+    def text(self, ptr: int) -> str | None:
+        """Text of the memo starting at ptr (None if missing, binary or unreadable)."""
+        if ptr not in self.cache:
+            self.cache[ptr] = self._read(ptr)
+        return self.cache[ptr]
+
+    def _read(self, ptr: int) -> str | None:
+        if self.m is None or ptr >= self.m.size:
+            return None
+        try:
+            r = parse(self.m.raw(ptr))
+        except (ValueError, struct.error, OSError):
+            return None
+        return r["text"] if r["kind"] == "text" else None
 
 
 # ---------------------------------------------------------------- layouts
-def load_layouts(path=DEFAULT_LAYOUTS):
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+def load_layouts(path: str | Path = DEFAULT_LAYOUTS) -> dict[str, Any]:
+    """The learned layouts document ({"tables": {name: layout}, ...})."""
+    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def desc_hash(data, rec0):
+def fic_files(folder: str | Path) -> dict[str, Path]:
+    """{table name: path} of the .fic files in a folder."""
+    return {p.stem: p for p in Path(folder).iterdir() if p.suffix.lower() == ".fic"}
+
+
+def desc_hash(data: bytes, rec0: int) -> str:
     """SHA-1 of the header block between the GUIDs and the control block (the table description).
     The block is only hashed, never decoded: any change to it means the table definition changed."""
-    import hashlib
-    return hashlib.sha1(data[0x5A:rec0 - 44]).hexdigest()
+    return hashlib.sha1(data[0x5A : rec0 - CONTROL_BLOCK], usedforsecurity=False).hexdigest()
 
 
-def fingerprint(data, fr):
-    """Per-table schema fingerprint: record stride, position of record 0 (depends on the size of
-    the table description) and a hash of the description block."""
-    return {"stride": fr["stride"], "rec0": fr["rec0"], "desc_sha1": desc_hash(data, fr["rec0"])}
-
-
-def check_fingerprint(fic_path, layout):
+def check_fingerprint(fic_path: str | Path, layout: Layout) -> tuple[bool, str, Framing | None]:
     """Returns (ok, reason, framing)."""
-    with open(fic_path, "rb") as f:
-        data = f.read()
+    data = Path(fic_path).read_bytes()
     fr = frame(data, layout["stride"], layout.get("rec0"))
     if fr is None:
         return False, "framing with the learned stride failed (record size changed?)", None
@@ -371,57 +434,66 @@ def check_fingerprint(fic_path, layout):
     return True, "", fr
 
 
-def read_table(fic_path, layout, data=None, with_recno=False):
+def _null_mask(col: Layout) -> tuple[int, int] | None:
+    """(byte offset, bit mask) of a column's NULL bit, if it has one."""
+    if "null_bit" not in col:
+        return None
+    return 8 + col["null_bit"] // 8, 1 << (col["null_bit"] % 8)
+
+
+def _column_readers(fic_path: Path, layout: Layout) -> list[tuple[str, Decoder, tuple[int, int] | None]]:
+    has_memo = any(c["type"] == "memo" for c in layout["columns"])
+    memo = MemoFile(fic_path.with_suffix(".mmo")) if has_memo else None
+    return [
+        (c["name"], compile_decoder(c["type"], c["offset"], size_of(c), memo), _null_mask(c)) for c in layout["columns"]
+    ]
+
+
+def read_table(
+    fic_path: str | Path, layout: Layout, data: bytes | None = None, with_recno: bool = False
+) -> Iterator[Any]:
     """Yield rows as lists of (column, value) pairs, in physical record order,
-    formatted like WDMap's XML export."""
+    formatted like WDMap's XML export ((recno, row) with with_recno)."""
+    fic_path = Path(fic_path)
     if data is None:
-        with open(fic_path, "rb") as f:
-            data = f.read()
+        data = fic_path.read_bytes()
     fr = frame(data, layout["stride"], layout.get("rec0"))
     if fr is None:
         raise ValueError(f"{fic_path}: cannot frame records with stride {layout['stride']}")
-    mmo = os.path.splitext(fic_path)[0] + ".mmo"
-    memo = MemoFile(mmo) if any(c["type"] == "memo" for c in layout["columns"]) else None
-    cols = [(c["name"], compile_decoder(c["type"], c["offset"], size_of(c), memo),
-             (8 + c["null_bit"] // 8, 1 << (c["null_bit"] % 8)) if "null_bit" in c else None)
-            for c in layout["columns"]]
+    cols = _column_readers(fic_path, layout)
     for recno, rec in active_records(data, fr):
-        row = []
-        for name, f, nb in cols:
-            if nb and not rec[nb[0]] & nb[1]:
-                continue           # NULL: WDMap leaves the element out
-            v = f(rec)
-            row.append((name, "" if v is None else v))
+        # a NULL item (cleared bit) is left out, like WDMap does
+        row = [(name, "" if (v := f(rec)) is None else v) for name, f, nb in cols if not nb or rec[nb[0]] & nb[1]]
         yield (recno, row) if with_recno else row
 
 
-def xml_escape(s):
+def xml_escape(s: str) -> str:
+    """Escape &, < and > like WDMap."""
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _undefined_as_byte(err):
+def _undefined_as_byte(err: UnicodeEncodeError) -> tuple[bytes, int]:
     """Encode error handler: U+FFFD stands for a cp1252 byte without a character (0x81, 0x8D, 0x8F,
     0x90, 0x9D); write an undefined byte back so the file reads exactly like WDMap's export
     (xmlrows decodes it as U+FFFD again)."""
-    s = err.object[err.start:err.end]
-    return bytes(0x81 if ch == "�" else 0x3F for ch in s), err.end
+    s = err.object[err.start : err.end]
+    return bytes(0x81 if ch == "\ufffd" else 0x3F for ch in s), err.end
 
 
 codecs.register_error("wdmap_undefined", _undefined_as_byte)
 
 
-def write_xml(path, table, rows):
+def write_xml(path: str | Path, table: str, rows: Iterable[list[tuple[str, str]]]) -> int:
     """Write rows in WDMap's XML export format (cp1252 bytes, CRLF, tab indentation), so that
-    xmlrows.rows_of() / build_sqlite.py read them exactly like a WDMap export."""
+    xmlrows.rows_of() / build_sqlite.py read them exactly like a WDMap export. Returns the row count."""
     n = 0
     crlf, tab = "\r\n", "\t"
-    with open(path, "w", encoding="cp1252", errors="wdmap_undefined", newline="") as f:
+    with Path(path).open("w", encoding="cp1252", errors="wdmap_undefined", newline="") as f:
         f.write('<?xml version="1.0" encoding="ISO-8859-1" standalone="yes"?>' + crlf)
         f.write(f'<?xml-stylesheet href="{table}.xsl" type="text/xsl"?>' + "\n" + "<HF_DOCUMENT>" + crlf)
         for row in rows:
             parts = [f"{tab}<{table}>{crlf}"]
-            for c, v in row:
-                parts.append(f"{tab}{tab}<{c}>{xml_escape(v)}</{c}>{crlf}")
+            parts += [f"{tab}{tab}<{c}>{xml_escape(v)}</{c}>{crlf}" for c, v in row]
             parts.append(f"{tab}</{table}>{crlf}")
             f.write("".join(parts))
             n += 1
@@ -429,16 +501,21 @@ def write_xml(path, table, rows):
     return n
 
 
-def main():
+def find_layout(layouts: dict[str, Layout], table: str) -> Layout | None:
+    """Layout of a table, matching its name case-insensitively when there is no exact match."""
+    return layouts.get(table) or {k.lower(): v for k, v in layouts.items()}.get(table.lower())
+
+
+def main(argv: list[str] | None = None) -> None:
+    """CLI: print a few rows of one table, or write all of them as a WDMap-style XML file."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("fic")
-    ap.add_argument("--layouts", default=DEFAULT_LAYOUTS)
+    ap.add_argument("--layouts", default=str(DEFAULT_LAYOUTS))
     ap.add_argument("--limit", type=int, default=5, help="rows to print (0 = all)")
     ap.add_argument("--xml", help="write all rows to this XML file (WDMap format) instead of printing")
-    a = ap.parse_args()
-    table = os.path.splitext(os.path.basename(a.fic))[0]
-    layouts = load_layouts(a.layouts)["tables"]
-    lay = layouts.get(table) or {k.lower(): v for k, v in layouts.items()}.get(table.lower())
+    a = ap.parse_args(argv)
+    table = Path(a.fic).stem
+    lay = find_layout(load_layouts(a.layouts)["tables"], table)
     if not lay or not lay.get("columns"):
         sys.exit(f"no layout for {table}")
     ok, why, _ = check_fingerprint(a.fic, lay)
@@ -451,7 +528,7 @@ def main():
     for i, row in enumerate(read_table(a.fic, lay)):
         if a.limit and i >= a.limit:
             break
-        print({c: v for c, v in row})
+        print(dict(row))
 
 
 if __name__ == "__main__":

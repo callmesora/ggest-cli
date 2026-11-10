@@ -11,21 +11,21 @@ Dates: saved queries (`run_saved_query`) accept ISO `YYYY-MM-DD` or date words (
 
 ## Steps
 1. Headline, period vs same days one year earlier (default: year to date):
-   `py -m bi run_saved_query --name sales_period_vs_last_year --params '{"start": "year_start", "end": "today"}'`
+   `uv run ggest run_saved_query --name sales_period_vs_last_year --params '{"start": "year_start", "end": "today"}'`
    → net sales, margin, margin %, invoices, customers, avg/median invoice, products/services, big documents
    (>= 5 000 €) and sales without them. For a month: `{"start": "2026-10-01", "end": "2026-10-31"}`.
 2. Where the difference comes from:
-   - Business lines: `py -m bi run_saved_query --name sales_period_comparison_by_line --params '{"a_start": "last_year_start", "a_end": "today_last_year", "b_start": "year_start", "b_end": "today"}'` (A = previous, B = current).
-   - Customer segments (customer_dim.segment), same days each year: `py -m bi run_saved_query --name sales_customer_segments_by_year --params "start_year=last_year,through_mmdd=today_mmdd"`
+   - Business lines: `uv run ggest run_saved_query --name sales_period_comparison_by_line --params '{"a_start": "last_year_start", "a_end": "today_last_year", "b_start": "year_start", "b_end": "today"}'` (A = previous, B = current).
+   - Customer segments (customer_dim.segment), same days each year: `uv run ggest run_saved_query --name sales_customer_segments_by_year --params "start_year=last_year,through_mmdd=today_mmdd"`
      (one row per year and segment, with share of the year).
-   - Series groups (e.g. franchise series vs shop): `py -m bi run_saved_query --name sales_series_groups_by_year`.
-   - Big deals in both periods: `py -m bi run_saved_query --name sales_big_deals --params '{"start": "last_year_start", "min_net": 5000}'`.
-   - Months: `py -m bi sales_over_time --period month --start 2025-01-01 --end 2026-11-07`.
-3. Optional context: `py -m bi top_products --start 2026-01-01 --end 2026-11-07 --by margin --limit 10`,
-   `py -m bi top_customers --start 2026-01-01 --end 2026-11-07 --limit 10`,
-   seasonality (share of the year still to come): `py -m bi run_saved_query --name sales_seasonality_by_month`.
+   - Series groups (e.g. franchise series vs shop): `uv run ggest run_saved_query --name sales_series_groups_by_year`.
+   - Big deals in both periods: `uv run ggest run_saved_query --name sales_big_deals --params '{"start": "last_year_start", "min_net": 5000}'`.
+   - Months: `uv run ggest sales_over_time --period month --start 2025-01-01 --end 2026-11-07`.
+3. Optional context: `uv run ggest top_products --start 2026-01-01 --end 2026-11-07 --by margin --limit 10`,
+   `uv run ggest top_customers --start 2026-01-01 --end 2026-11-07 --limit 10`,
+   seasonality (share of the year still to come): `uv run ggest run_saved_query --name sales_seasonality_by_month`.
 4. Pipeline: open quotes that may still land this period:
-   `py -m bi run_saved_query --name sales_quotes_conversion_by_year --params '{"doc_type": "all"}'` (column net_open).
+   `uv run ggest run_saved_query --name sales_quotes_conversion_by_year --params '{"doc_type": "all"}'` (column net_open).
 
 ## Reading the numbers
 - Net of VAT, credit notes negative, cancelled / internal / vehicle sales excluded.

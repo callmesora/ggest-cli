@@ -18,7 +18,7 @@ every gGest database, the company-specific meaning lives in `ggest.json` (see Co
 ## Configuration (company-specific meaning)
 `ggest.json` next to the database (or env `GGEST_CONFIG`) overrides `bi/config.default.json`; documented example
 in `bi/config.example.json`. It is copied into `_bi_config`, `_bi_series_groups`, `_bi_expense_rules`,
-`_bi_regions` by `py -m bi build-views`.
+`_bi_regions` by `uv run ggest build-views`.
 - `internal_doc_types`, `internal_doc_name_like`: sales document types that are not trading revenue.
 - `excluded_series_prefixes`: invoice series that are not trading revenue.
 - `series_groups`: invoice series that are a business unit of their own (e.g. a franchise corner) →
@@ -27,7 +27,7 @@ in `bi/config.example.json`. It is copied into `_bi_config`, `_bi_series_groups`
   `finance_operating_expenses_by_category`, `finance_profit_and_loss_by_year`.
 - `setup_*` saved queries show what the config currently does (skill `new-database-setup`).
 
-## Domain views (details: `py -m bi data_dictionary --topic <domain>` = `docs/domains/<domain>.md`)
+## Domain views (details: `uv run ggest data_dictionary --topic <domain>` = `docs/domains/<domain>.md`)
 - **sales**: `quote_docs`, `quote_lines`, `quote_outcomes` (quotes/pro-formas/orders and whether they became
   invoices), `delivery_notes`, `online_items`.
 - **customers**: `customer_dim` (segment, NIF check, contact-presence flags — no contact values),

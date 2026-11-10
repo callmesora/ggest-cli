@@ -1,8 +1,8 @@
 # Sales domain: invoices, quotes, delivery notes, products, pricing
 
 Core views (`bi/sql/semantic.sql`): `sales_facts` (lines that count, with cost/margin), `sales_docs`, `sales_lines`,
-`items`, `doc_types`. This domain adds `bi/sql/ext/sales.sql` (apply: `py -m bi build-views --file bi/sql/ext/sales.sql`)
-and the saved queries `bi/queries/sales/sales_*.sql` (`py -m bi saved_queries --domain sales`).
+`items`, `doc_types`. This domain adds `bi/sql/ext/sales.sql` (apply: `uv run ggest build-views --file bi/sql/ext/sales.sql`)
+and the saved queries `bi/queries/sales/sales_*.sql` (`uv run ggest saved_queries --domain sales`).
 Skills: `sales-report`, `quote-followup`, `product-lookup`, `pricing-review` (`.claude/skills/`).
 
 ## Views added

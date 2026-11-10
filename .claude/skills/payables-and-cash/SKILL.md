@@ -7,16 +7,16 @@ description: What the company owes suppliers and other creditors, what is due, p
 Amounts **gross, with VAT** (what leaves or enters the bank). Run from the project root.
 
 ## Steps
-1. What we owe now: `py -m bi run_saved_query --name finance_payables_open`
+1. What we owe now: `uv run ggest run_saved_query --name finance_payables_open`
    (`--params '{"party_type":"supplier"}'` or `"creditor"`; one row per open document, oldest due first, total_open).
 2. Payments made in a period, by payee:
-   `py -m bi run_saved_query --name finance_payments_made --params '{"start":"2026-10-01","end":"2026-10-31"}'`.
-3. Money in vs money out by month: `py -m bi run_saved_query --name finance_cash_flow_by_month`
+   `uv run ggest run_saved_query --name finance_payments_made --params '{"start":"2026-10-01","end":"2026-10-31"}'`.
+3. Money in vs money out by month: `uv run ggest run_saved_query --name finance_cash_flow_by_month`
    (receipts + counter sales vs supplier and overhead payments; net_flow and cumulative).
-4. Till for a day or range: `py -m bi run_saved_query --name finance_till_by_day` (default: last day in the data;
+4. Till for a day or range: `uv run ggest run_saved_query --name finance_till_by_day` (default: last day in the data;
    `--params '{"start":"2026-11-01","end":"2026-11-07"}'`); cash_net = expected change in the cash drawer.
-5. Payment-method mix over time: `py -m bi run_saved_query --name finance_payment_methods --params '{"granularity":"month"}'`.
-6. Entities we both sell to and buy from (offsets): `py -m bi run_saved_query --name finance_customer_supplier_offsets`.
+5. Payment-method mix over time: `uv run ggest run_saved_query --name finance_payment_methods --params '{"granularity":"month"}'`.
+6. Entities we both sell to and buy from (offsets): `uv run ggest run_saved_query --name finance_customer_supplier_offsets`.
 
 ## Rules and traps
 - Open = document total − amount settled; supplier credit notes are negative (money owed to us).

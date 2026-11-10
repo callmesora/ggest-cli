@@ -10,16 +10,16 @@ individual's actions) or use this to monitor attendance; answer with aggregates 
 
 ## Steps
 1. Division of tasks — documents created per user and module in the period:
-   `py -m bi run_saved_query --name operations_documents_by_user --params '{"start": "year_start", "end": "today"}'`
-   (sales value per user: `py -m bi run_saved_query --name management_sales_by_user`)
+   `uv run ggest run_saved_query --name operations_documents_by_user --params '{"start": "year_start", "end": "today"}'`
+   (sales value per user: `uv run ggest run_saved_query --name management_sales_by_user`)
 2. Monthly workload (documents per module, active users, working days, documents per day):
-   `py -m bi run_saved_query --name operations_workload_by_month --params '{"start": "last_year_start", "end": "today"}'`
+   `uv run ggest run_saved_query --name operations_workload_by_month --params '{"start": "last_year_start", "end": "today"}'`
 3. Busiest weekdays and hours (whole team):
-   `py -m bi run_saved_query --name operations_activity_heatmap --params '{"start": "last_year_start", "end": "today"}'`
+   `uv run ggest run_saved_query --name operations_activity_heatmap --params '{"start": "last_year_start", "end": "today"}'`
 4. Where gGest time goes (screens/areas; optional `"user": "3"` for one user's mix):
-   `py -m bi run_saved_query --name operations_activity_by_area --params '{"start": "year_start", "end": "today", "limit": 15}'`
+   `uv run ggest run_saved_query --name operations_activity_by_area --params '{"start": "year_start", "end": "today", "limit": 15}'`
 5. Rework: cancellations, deletions, lock overrides per area and year:
-   `py -m bi run_saved_query --name operations_cancellations_by_year --params '{"from_year": "years_ago_3"}'`
+   `uv run ggest run_saved_query --name operations_cancellations_by_year --params '{"from_year": "years_ago_3"}'`
 
 ## Reading the numbers
 - `documents_created` uses the record creation time; documents before 2020-03-24 were imported when gGest was

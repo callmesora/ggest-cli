@@ -7,15 +7,15 @@ description: Recurring contracts (avenças: hosting, domains, DNS, licences, sub
 Values **net of VAT**. Run from the project root.
 
 ## Steps
-1. Portfolio: `py -m bi run_saved_query --name finance_recurring_revenue_summary`
+1. Portfolio: `uv run ggest run_saved_query --name finance_recurring_revenue_summary`
    (per item: active contracts, customers, annual value, MRR, to_bill_now, inactive, billed_last_12m as a check).
 2. What to invoice now or soon:
-   `py -m bi run_saved_query --name finance_recurring_contracts --params '{"status":"to_bill","days_ahead":30}'`
+   `uv run ggest run_saved_query --name finance_recurring_contracts --params '{"status":"to_bill","days_ahead":30}'`
    billing_status: overdue (next billing date passed, no invoice yet), never_billed, due_soon.
 3. Full list or cancelled ones: `--params '{"status":"all"}'` / `'{"status":"inactive"}'`.
    `last_doc_unpaid` > 0 = the last renewal invoice is still open: chase it (collections skill) before renewing.
 4. All recurring revenue streams, including software update contracts not managed as avenças:
-   `py -m bi run_saved_query --name sales_recurring_revenue_by_year`.
+   `uv run ggest run_saved_query --name sales_recurring_revenue_by_year`.
 
 ## Rules and traps
 - amount_per_billing = quantity × unit price; annual_value = amount × billings per year

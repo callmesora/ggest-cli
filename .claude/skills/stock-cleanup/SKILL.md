@@ -8,15 +8,15 @@ Run from the project root (bash quoting; in PowerShell 5.1 escape inner quotes a
 
 ## Steps
 1. Size of the problem per group and action (no sale in 12 months; items bought in the last 3 months ignored):
-   `py -m bi run_saved_query --name stock_cleanup_summary --params '{"months": 12}'`
+   `uv run ggest run_saved_query --name stock_cleanup_summary --params '{"months": 12}'`
 2. Item list with the suggested action (biggest value first; filter a group with `"group": "CONSUM"`):
-   `py -m bi run_saved_query --name stock_cleanup_candidates --params '{"months": 12, "min_value": 20, "limit": 40}'`
+   `uv run ggest run_saved_query --name stock_cleanup_candidates --params '{"months": 12, "min_value": 20, "limit": 40}'`
 3. Context: which groups hold more stock than they sell, and the trend of the stock value:
-   `py -m bi run_saved_query --name stock_turnover_by_group`
-   `py -m bi run_saved_query --name stock_value_by_year`
+   `uv run ggest run_saved_query --name stock_turnover_by_group`
+   `uv run ggest run_saved_query --name stock_value_by_year`
 4. Finance's view (counts purchases as activity too, months without ANY movement):
-   `py -m bi run_saved_query --name finance_stock_value_by_group` and `finance_dead_stock_items`.
-5. Data errors to fix first: `py -m bi run_saved_query --name stock_negative_items`.
+   `uv run ggest run_saved_query --name finance_stock_value_by_group` and `finance_dead_stock_items`.
+5. Data errors to fix first: `uv run ggest run_saved_query --name stock_negative_items`.
 
 ## Suggested actions (column `suggested_action`)
 - `return_to_supplier` — bought in the last 12 months and not selling: ask the supplier for a return/credit

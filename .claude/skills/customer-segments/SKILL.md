@@ -6,20 +6,20 @@ description: Who our customers are — segments (público, empresas, particulare
 
 Run from the project root. Money net of VAT; current year is partial → compare year-to-date with `through_mmdd=today_mmdd`.
 
-1. **Segments, whole period**: `py -m bi run_saved_query --name customers_segment_summary`
+1. **Segments, whole period**: `uv run ggest run_saved_query --name customers_segment_summary`
    Year-to-date vs last year: `--params '{"start":"last_year_start","through_mmdd":"today_mmdd","by_year":1}'`
-2. **Segments per year** (trend): `py -m bi run_saved_query --name customers_segment_by_year --params '{"start_year":2021}'`
-3. **What each segment buys**: `py -m bi run_saved_query --name customers_segment_product_mix --params '{"segment":"empresa","limit":15}'`
-4. **Concentration**: `py -m bi run_saved_query --name customers_concentration_by_year` and value bands
-   `py -m bi run_saved_query --name customers_value_bands`; top entities:
-   `py -m bi run_saved_query --name customers_top_entities --params '{"limit":15}'` (`"by":"margin"` for profit).
+2. **Segments per year** (trend): `uv run ggest run_saved_query --name customers_segment_by_year --params '{"start_year":2021}'`
+3. **What each segment buys**: `uv run ggest run_saved_query --name customers_segment_product_mix --params '{"segment":"empresa","limit":15}'`
+4. **Concentration**: `uv run ggest run_saved_query --name customers_concentration_by_year` and value bands
+   `uv run ggest run_saved_query --name customers_value_bands`; top entities:
+   `uv run ggest run_saved_query --name customers_top_entities --params '{"limit":15}'` (`"by":"margin"` for profit).
 5. **New vs returning** (add `"through_mmdd":"today_mmdd"` for YTD):
-   `py -m bi run_saved_query --name customers_new_vs_returning`;
-   retention: `py -m bi run_saved_query --name customers_cohort_retention --params '{"segment":"particular"}'`
-6. **Relationship base incl. workshop**: `py -m bi run_saved_query --name customers_relationship_base_by_year`
-   and repair → purchase conversion: `py -m bi run_saved_query --name customers_repair_first_conversion`
-7. **Geography**: `py -m bi run_saved_query --name customers_geography --params '{"level":"island"}'` (or `locality`).
-8. **RFM picture**: `py -m bi run_saved_query --name customers_rfm_summary`
+   `uv run ggest run_saved_query --name customers_new_vs_returning`;
+   retention: `uv run ggest run_saved_query --name customers_cohort_retention --params '{"segment":"particular"}'`
+6. **Relationship base incl. workshop**: `uv run ggest run_saved_query --name customers_relationship_base_by_year`
+   and repair → purchase conversion: `uv run ggest run_saved_query --name customers_repair_first_conversion`
+7. **Geography**: `uv run ggest run_saved_query --name customers_geography --params '{"level":"island"}'` (or `locality`).
+8. **RFM picture**: `uv run ggest run_saved_query --name customers_rfm_summary`
 
 ## Interpreting
 - Segment rules (NIF prefix, gGest group, name words) are in `docs/domains/customers.md`; the gGest group exists

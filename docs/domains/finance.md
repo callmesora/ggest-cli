@@ -2,8 +2,8 @@
 
 Core views used: `sales_facts`, `sales_docs`, `doc_types`, `customers`; config tables `_bi_expense_rules` /
 `_bi_config` (expense categories from `ggest.json`). This domain adds `bi/sql/ext/finance.sql`
-(apply: `py -m bi build-views --file bi/sql/ext/finance.sql`) and the saved queries `bi/queries/finance/finance_*.sql`
-(`py -m bi saved_queries --domain finance`). Skills: `collections`, `month-close`, `payables-and-cash`,
+(apply: `uv run ggest build-views --file bi/sql/ext/finance.sql`) and the saved queries `bi/queries/finance/finance_*.sql`
+(`uv run ggest saved_queries --domain finance`). Skills: `collections`, `month-close`, `payables-and-cash`,
 `recurring-contracts`, `tax-calendar` (`.claude/skills/`).
 
 ## Views added

@@ -7,20 +7,20 @@ description: Everything about one customer before a call, visit or quote — pro
 Run from the project root. `<c>` = customer code (preferred) or NIF; a name fragment works only in step 1.
 
 1. **Find the customer** (code, NIF or part of the name; LIKE is accent-sensitive, so type "munic" not "município"):
-   `py -m bi run_saved_query --name customers_briefing --params '{"customer":"<name or code>"}' --json`
+   `uv run ggest run_saved_query --name customers_briefing --params '{"customer":"<name or code>"}' --json`
    - Several rows → pick the right one (same `entity_key` = same NIF = same legal entity) or ask the user.
    - `records_same_entity > 1` → other records share the NIF; the next steps merge them by default (`merge_nif=1`).
-2. **History by year**: `py -m bi run_saved_query --name customers_history_by_year --params '{"customer":"<c>"}'`
-3. **What they buy**: `py -m bi run_saved_query --name customers_purchase_mix --params '{"customer":"<c>","limit":10}'`
+2. **History by year**: `uv run ggest run_saved_query --name customers_history_by_year --params '{"customer":"<c>"}'`
+3. **What they buy**: `uv run ggest run_saved_query --name customers_purchase_mix --params '{"customer":"<c>","limit":10}'`
    (add `"start":"years_ago_3"` for recent habits).
-4. **Equipment they own**: `py -m bi run_saved_query --name customers_devices --params '{"customer":"<c>","limit":20}'`
-5. **Latest interactions**: `py -m bi run_saved_query --name customers_timeline --params '{"customer":"<c>","limit":15}'`
+4. **Equipment they own**: `uv run ggest run_saved_query --name customers_devices --params '{"customer":"<c>","limit":20}'`
+5. **Latest interactions**: `uv run ggest run_saved_query --name customers_timeline --params '{"customer":"<c>","limit":15}'`
 6. **"Biggest customer" questions** (e.g. maior cliente empresa): rank entities first —
-   `py -m bi run_saved_query --name customers_top_entities --params '{"segment":"empresa","limit":10}'` (`"by":"margin"`
+   `uv run ggest run_saved_query --name customers_top_entities --params '{"segment":"empresa","limit":10}'` (`"by":"margin"`
    for profit) — then brief the chosen one. Check `largest_invoice_share_pct`: above ~50% means one project made the
    total (one-off, not a regular customer); say so and also name the best *recurring* customer.
-7. Optional: debt detail `py -m bi run_saved_query --name finance_receivables_open --params '{"min_open":0}'` (filter
-   the customer); repair desk view `py -m bi saved_queries --domain repairs`.
+7. Optional: debt detail `uv run ggest run_saved_query --name finance_receivables_open --params '{"min_open":0}'` (filter
+   the customer); repair desk view `uv run ggest saved_queries --domain repairs`.
 
 ## Reading the results
 - `segment`: publico / empresa / particular / associativo (rules in `docs/domains/customers.md`).

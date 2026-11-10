@@ -1,23 +1,29 @@
-"""MCP server (stdio, no dependencies) exposing the Inforbyte BI tools to AI agents.
+"""MCP server (FastMCP, stdio) exposing the gGest BI tools to AI agents.
 
-Run:   py -m bi.mcp_server [--db path/to/data.sqlite]   (one server entry per gGest database)
-Claude Code:  claude mcp add inforbyte-bi -- py -m bi.mcp_server   (from the inforbyte-bi folder)
-or add to an MCP client config:
-  {"mcpServers": {"inforbyte-bi": {"command": "py", "args": ["-m", "bi.mcp_server"],
-                                   "cwd": "<path>/inforbyte-bi"}}}
+Run:          uv run ggest-mcp [--db path/to/data.sqlite]     (one server entry per gGest database)
+Claude Code:  claude mcp add ggest -- uv run --directory <path>/inforbyte-bi ggest-mcp
+Any client:   {"mcpServers": {"ggest": {"command": "uv",
+                                        "args": ["run", "--directory", "<path>/inforbyte-bi", "ggest-mcp"]}}}
 
-All tools are read-only. Amounts are net of VAT (EUR); see docs/DATA_DICTIONARY.md (also served as the
-`data_dictionary` tool) for definitions.
+All tools are read-only. Amounts are net of VAT (EUR); the `data_dictionary` tool explains definitions.
 """
-import json
-import sys
-import traceback
+
+import functools
+import sqlite3
+from importlib.metadata import version
 from pathlib import Path
+from typing import Any
 
-from . import metrics, saved
+import click
+from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
+from fastmcp.tools import Tool as McpTool
+from mcp.types import ToolAnnotations
 
-PROTOCOL = "2025-06-18"
-DICT = Path(__file__).resolve().parent.parent / "docs" / "DATA_DICTIONARY.md"
+from . import db
+from .metrics import TOOLS  # importing bi.metrics registers every tool
+from .registry import Tool
+
 INSTRUCTIONS = (
     "Business data of a company using the gGest ERP (Golfinho Software): sales, customers, products, repairs "
     "(assistências), purchases, stock, receivables and expenses. Money is EUR net of VAT; credit notes are negative; "
@@ -25,73 +31,37 @@ INSTRUCTIONS = (
     "data date: 'today' in queries means that date) and data_dictionary. Prefer named tools, then saved_queries "
     "(search by words), then `query` (read-only SQL on the business views). Quote periods and caveats in answers."
 )
+READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
 
 
-def tool_list():
-    out = []
-    for name, (_, desc, props) in metrics.TOOLS.items():
-        out.append({"name": name, "description": desc,
-                    "inputSchema": {"type": "object", "properties": props,
-                                    "required": metrics.REQUIRED.get(name, [])}})
-    return out
+def as_mcp_tool(t: Tool) -> McpTool:
+    """Wrap a registry tool: same signature and schema, date words resolved before the call."""
 
-
-def call(name, args):
-    if name not in metrics.TOOLS:
-        raise ValueError(f"unknown tool {name}")
-    fn = metrics.TOOLS[name][0]
-    saved.LAST_TRUNCATED = False
-    out = fn(**saved.resolve(args or {}))
-    if saved.LAST_TRUNCATED:   # tell the model the list is incomplete, so it never sums a cut list
-        out = {"rows": out, "truncated": True, "note": "more rows exist; call again with a higher limit for totals"}
-    return json.dumps(out, ensure_ascii=False, default=str)
-
-
-def handle(msg):
-    method, mid = msg.get("method"), msg.get("id")
-    if mid is None:          # notification
-        return None
-    try:
-        if method == "initialize":
-            res = {"protocolVersion": msg.get("params", {}).get("protocolVersion", PROTOCOL),
-                   "capabilities": {"tools": {}}, "instructions": INSTRUCTIONS,
-                   "serverInfo": {"name": "ggest-bi", "version": "2.0.0"}}
-        elif method == "tools/list":
-            res = {"tools": tool_list()}
-        elif method == "tools/call":
-            p = msg.get("params", {})
-            try:
-                res = {"content": [{"type": "text", "text": call(p.get("name"), p.get("arguments"))}]}
-            except Exception as e:  # tool errors are returned to the model, not as protocol errors
-                res = {"content": [{"type": "text", "text": f"error: {e}"}], "isError": True}
-        elif method == "ping":
-            res = {}
-        else:
-            return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": f"method not found: {method}"}}
-        return {"jsonrpc": "2.0", "id": mid, "result": res}
-    except Exception as e:
-        return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32603, "message": str(e),
-                                                      "data": traceback.format_exc()[-2000:]}}
-
-
-def main():
-    if "--db" in sys.argv:
-        from . import db
-        db.set_db(sys.argv[sys.argv.index("--db") + 1])
-    sys.stdin.reconfigure(encoding="utf-8")
-    sys.stdout.reconfigure(encoding="utf-8")
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
+    @functools.wraps(t.fn)
+    def run(**kwargs: Any) -> Any:
         try:
-            msg = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        out = handle(msg)
-        if out is not None:
-            sys.stdout.write(json.dumps(out, ensure_ascii=False) + "\n")
-            sys.stdout.flush()
+            return t.call(**kwargs)
+        except (ValueError, sqlite3.Error) as e:  # the agent's request was wrong: tell it why, no traceback
+            raise ToolError(str(e)) from e
+
+    return McpTool.from_function(run, name=t.name, description=t.description, annotations=READ_ONLY,
+                                 output_schema=None)  # fmt: skip
+
+
+def build_server() -> FastMCP:
+    server = FastMCP("ggest-bi", instructions=INSTRUCTIONS, version=version("ggest-cli"))
+    for t in TOOLS.values():
+        server.add_tool(as_mcp_tool(t))
+    return server
+
+
+@click.command()
+@click.option("--db", "db_file", type=click.Path(dir_okay=False, path_type=Path), help="SQLite database to use")
+def main(db_file: Path | None) -> None:
+    """Serve the tools over stdio."""
+    if db_file:
+        db.set_db(db_file)
+    build_server().run(show_banner=False)
 
 
 if __name__ == "__main__":

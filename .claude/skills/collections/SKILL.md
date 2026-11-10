@@ -7,20 +7,20 @@ description: Collections worklist from gGest — who owes money, oldest debts fi
 All amounts are **gross, with VAT** (what the customer pays). Run from the project root.
 
 ## Steps
-1. Overview and control total: `py -m bi run_saved_query --name finance_receivables_aging`
+1. Overview and control total: `uv run ggest run_saved_query --name finance_receivables_aging`
    (buckets by days past due; TOTAL must match the `Clientes.saldo` control row within a few euros).
-2. Worklist, oldest first (no contacts): `py -m bi run_saved_query --name finance_collections_list --json`
+2. Worklist, oldest first (no contacts): `uv run ggest run_saved_query --name finance_collections_list --json`
    (`--params '{"order":"amount"}'` for biggest first; `min_open` to skip cents). The first row is the TOTAL over
    all debtors ("TOTAL (N customers, M listed)"): quote totals from it, never from summing a cut list.
    Columns: open_total, overdue, overdue_90d, oldest_due, max_days_overdue, last_payment, pending_mb_refs,
    einvoices_sent, we_owe_them (open supplier/creditor balance with the same NIF), docs.
    Contacts only for the shortlist you print (e.g. top 10 by amount):
-   `py -m bi run_saved_query --name finance_collections_list --params '{"order":"amount","limit":10,"include_contacts":1}'`.
+   `uv run ggest run_saved_query --name finance_collections_list --params '{"order":"amount","limit":10,"include_contacts":1}'`.
 3. For each customer to contact, the statement to send:
-   `py -m bi run_saved_query --name finance_customer_open_items --params '{"customer":"<code, NIF or name>"}'`
+   `uv run ggest run_saved_query --name finance_customer_open_items --params '{"customer":"<code, NIF or name>"}'`
    (each open document with due date, days overdue, paid so far, Multibanco entity/reference, e-invoice sent date).
-4. Who pays late as a habit (to require upfront payment): `py -m bi run_saved_query --name finance_slow_payers`.
-5. Is the total going up? `py -m bi run_saved_query --name finance_receivables_trend` (month-end balances).
+4. Who pays late as a habit (to require upfront payment): `uv run ggest run_saved_query --name finance_slow_payers`.
+5. Is the total going up? `uv run ggest run_saved_query --name finance_receivables_trend` (month-end balances).
 
 ## Rules and traps
 - Open amount = document total − amount settled (`receivable_docs`); credit notes are negative and already netted.

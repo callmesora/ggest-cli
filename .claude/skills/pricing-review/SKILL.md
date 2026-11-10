@@ -8,16 +8,16 @@ Run from the project root (bash quoting; in PowerShell 5.1 escape inner quotes a
 
 ## Steps
 1. Sold at low/negative margin (period, product lines, ≥ min_net per item):
-   `py -m bi run_saved_query --name sales_low_margin_items --params '{"start": "last_year_start", "max_margin_pct": 10, "min_net": 300}'`
+   `uv run ggest run_saved_query --name sales_low_margin_items --params '{"start": "last_year_start", "max_margin_pct": 10, "min_net": 300}'`
 2. Catalogue prices that no longer cover the last purchase price (items in stock or sold recently):
-   `py -m bi run_saved_query --name sales_price_below_cost --params '{"min_margin_pct": 15}'`
+   `uv run ggest run_saved_query --name sales_price_below_cost --params '{"min_margin_pct": 15}'`
 3. Counter price cuts — lines sold ≥ 20 % under today's catalogue price or below cost, with the user who issued them:
-   `py -m bi run_saved_query --name sales_discounted_lines --params '{"start": "year_start", "min_discount_pct": 20}'`
+   `uv run ggest run_saved_query --name sales_discounted_lines --params '{"start": "year_start", "min_discount_pct": 20}'`
 4. Explicit discount fields per year (usually small: most price cuts are typed into the unit price):
-   `py -m bi run_saved_query --name sales_discounts_by_year`
-5. Margin by family/brand to see where to act: `py -m bi sales_by_category --level family --start 2025-01-01 --end 2026-11-07`
-   and margin data quality per year: `py -m bi run_saved_query --name sales_data_quality_by_year`.
-6. Web shop: `py -m bi run_saved_query --name sales_online_catalog_check` (active items with no stock or price 0).
+   `uv run ggest run_saved_query --name sales_discounts_by_year`
+5. Margin by family/brand to see where to act: `uv run ggest sales_by_category --level family --start 2025-01-01 --end 2026-11-07`
+   and margin data quality per year: `uv run ggest run_saved_query --name sales_data_quality_by_year`.
+6. Web shop: `uv run ggest run_saved_query --name sales_online_catalog_check` (active items with no stock or price 0).
 
 ## Tell real under-pricing from data errors
 - Margin −100 % to −400 % on cheap items = unit mismatch (bought per box, sold per unit) → fix the item's unit /

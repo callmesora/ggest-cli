@@ -12,3 +12,8 @@ docs/insights/
 docs/RELATORIO.md
 pipeline/layouts/*.bak
 pipeline/layouts/_relearn*
+.venv/
+.coverage
+coverage.json
+.ruff_cache/
+.pytest_cache/

@@ -1,113 +1,108 @@
-"""Database access for the Inforbyte BI toolkit.
+"""Database access for the gGest BI toolkit.
 
 The database is the SQLite file built by `pipeline/build_sqlite.py` from the gGest (HFSQL) export.
 Path: set_db() / CLI --db / env GGEST_DB (or INFORBYTE_DB), else <project>/data/data.sqlite.
 Business views: bi/sql/semantic.sql, then every bi/sql/ext/*.sql (one file per domain), in name order.
 """
+
 import os
-import re
 import sqlite3
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+from . import security
 
 PROJECT = Path(__file__).resolve().parent.parent
 SQL_DIR = Path(__file__).resolve().parent / "sql"
 SEMANTIC_SQL = SQL_DIR / "semantic.sql"
-_DB = None
+_LEGACY_VIEWS = ("product_cost_ratios", "sales_facts")  # older builds had these as views, now tables
 
 
-def set_db(path):
+@dataclass
+class _State:
+    path: Path | None = None
+
+
+_state = _State()
+
+
+def set_db(path: str | Path | None) -> None:
     """Point the toolkit at another gGest database (one SQLite file per company/database)."""
-    global _DB
-    _DB = Path(path) if path else None
+    _state.path = Path(path) if path else None
 
 
-def db_path():
-    if _DB:
-        return _DB
-    return Path(os.environ.get("GGEST_DB") or os.environ.get("INFORBYTE_DB") or PROJECT / "data" / "data.sqlite")
+def db_path() -> Path:
+    if _state.path:
+        return _state.path
+    env = os.environ.get("GGEST_DB") or os.environ.get("INFORBYTE_DB")
+    return Path(env) if env else PROJECT / "data" / "data.sqlite"
 
 
-def view_files():
-    return [SEMANTIC_SQL] + sorted((SQL_DIR / "ext").glob("*.sql"))
+def view_files() -> list[Path]:
+    return [SEMANTIC_SQL, *sorted((SQL_DIR / "ext").glob("*.sql"))]
 
 
-def connect(read_only=True):
-    p = db_path()
-    if not p.exists():
-        raise FileNotFoundError(f"database not found: {p} (build it with pipeline/build_sqlite.py)")
-    if read_only:
-        con = sqlite3.connect(f"file:{p.as_posix()}?mode=ro", uri=True, timeout=60)   # waits while views are rebuilt
-    else:
-        con = sqlite3.connect(p, timeout=300)   # waits for readers to finish
+def connect(*, read_only: bool = True) -> sqlite3.Connection:
+    path = db_path()
+    if not path.exists():
+        raise FileNotFoundError(f"database not found: {path} (build it with pipeline/build_sqlite.py)")
+    if read_only:  # waits while views are being rebuilt
+        con = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True, timeout=60)
+    else:  # waits for readers to finish
+        con = sqlite3.connect(path, timeout=300)
     con.row_factory = sqlite3.Row
     return con
 
 
-def build_views(file=None):
-    """(Re)create the business views (idempotent). `file`: apply only that one .sql file (e.g. a bi/sql/ext file)."""
-    con = connect(read_only=False)
-    for name in ("product_cost_ratios", "sales_facts"):   # older builds had these as views
-        if con.execute("SELECT 1 FROM sqlite_master WHERE type='view' AND name=?", (name,)).fetchone():
-            con.execute(f"DROP VIEW {name}")
-    if not file:
-        from . import config
-        config.apply(con)
-    for f in ([Path(file)] if file else view_files()):
-        try:
-            con.executescript(f.read_text(encoding="utf-8"))
-        except sqlite3.Error as e:
-            raise RuntimeError(f"{f.name}: {e}") from e
-    con.commit()
-    names = [r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='view' ORDER BY name")]
-    con.close()
-    return names
-
-
-def rows(sql, params=(), limit=None):
-    """Run a query and return a list of dicts."""
-    con = connect()
-    try:
-        cur = con.execute(sql, params)
-        out = cur.fetchmany(limit) if limit else cur.fetchall()
-        return [dict(r) for r in out]
-    finally:
-        con.close()
-
-
-_FORBIDDEN = re.compile(r"\b(insert|update|delete|drop|alter|create|replace|attach|detach|pragma|vacuum|reindex)\b", re.I)
-
-
-# gGest stores credentials readably: user passwords (utilizadores), e-mail/SMTP, web-shop, POS and workshop
-# terminal passwords, API keys and tokens, licence keys, bank account numbers. Agents never get them: these
-# tables are refused, and so is any query that names or returns a column that looks like a credential.
-_SECRET_TABLES = ("utilizadores", "broker", "contas_mail", "email_configuracao", "emails_perfil_contas", "ecom_lojas",
-                  "dropbox_contas", "sms_contas", "ia_extratordados", "mobivendas_terminais", "oficina_mecanicos",
-                  "oficina_terminais_recepcao", "oficina_terminais_recolha", "licencas", "licencas_registos",
-                  "conf_sistema", "contas_bancarias", "frlock", "terminais_mobistock", "perfisutl")
-_SECRET_COLS = r"\w*password\w*|palavrapasse|pwd\w*|senha\w*|\w*token\w*|chave\w*|nib\w*|iban\w*|swift|\w*_iban\w*|numero_cartao"
-_SECRET = re.compile(r"\b(" + "|".join(_SECRET_TABLES) + "|" + _SECRET_COLS + r")\b", re.I)
-_SECRET_COL = re.compile(r"^(" + _SECRET_COLS + r")$", re.I)
-
-
-def safe_query(sql, limit=500):
-    """Read-only ad-hoc SQL for agents: single SELECT/WITH statement, row cap, read-only connection."""
-    s = sql.strip().rstrip(";")
-    if ";" in s:
-        raise ValueError("only one statement allowed")
-    if not re.match(r"(?is)^\s*(select|with)\b", s):
-        raise ValueError("only SELECT / WITH queries are allowed")
-    if _FORBIDDEN.search(s):
-        raise ValueError("write/DDL keywords are not allowed")
-    if _SECRET.search(s):
-        raise ValueError("password columns are not available through this tool")
+@contextmanager
+def reading() -> Iterator[sqlite3.Connection]:
+    """Read-only connection, closed on exit."""
     con = connect(read_only=True)
     try:
-        cur = con.execute(s)
-        cols = [c[0] for c in cur.description]
-        if any(_SECRET_COL.match(c) for c in cols):     # e.g. SELECT * on a table holding a credential column
-            raise ValueError("password columns are not available through this tool")
-        data = cur.fetchmany(limit + 1)
-        truncated = len(data) > limit
-        return {"columns": cols, "rows": [list(r) for r in data[:limit]], "truncated": truncated}
+        yield con
     finally:
         con.close()
+
+
+def build_views(file: str | Path | None = None) -> list[str]:
+    """(Re)create the business views (idempotent). `file`: apply only that .sql file (e.g. a bi/sql/ext file)."""
+    from . import config  # noqa: PLC0415 - config imports db
+
+    con = connect(read_only=False)
+    try:
+        for name in _LEGACY_VIEWS:
+            if con.execute("SELECT 1 FROM sqlite_master WHERE type='view' AND name=?", (name,)).fetchone():
+                con.execute(f"DROP VIEW {name}")
+        if not file:
+            config.apply(con)
+        for sql_file in [Path(file)] if file else view_files():
+            try:
+                con.executescript(sql_file.read_text(encoding="utf-8"))
+            except sqlite3.Error as e:
+                raise RuntimeError(f"{sql_file.name}: {e}") from e
+        con.commit()
+        return [r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='view' ORDER BY name")]
+    finally:
+        con.close()
+
+
+def rows(sql: str, params: Sequence[Any] | dict[str, Any] = (), limit: int | None = None) -> list[dict[str, Any]]:
+    """Run a query and return a list of dicts."""
+    with reading() as con:
+        cur = con.execute(sql, params)
+        return [dict(r) for r in (cur.fetchmany(limit) if limit else cur.fetchall())]
+
+
+def safe_query(sql: str, limit: int = 500) -> dict[str, Any]:
+    """Read-only ad-hoc SQL for agents: single SELECT/WITH statement, row cap, read-only connection."""
+    statement = security.check_read_only(sql)
+    with reading() as con:
+        cur = con.execute(statement)
+        cols = [c[0] for c in cur.description]
+        if any(security.is_secret_column(c) for c in cols):  # e.g. SELECT * on a table with a credential column
+            raise ValueError(security.SECRET_MESSAGE)
+        data = cur.fetchmany(limit + 1)
+    return {"columns": cols, "rows": [list(r) for r in data[:limit]], "truncated": len(data) > limit}

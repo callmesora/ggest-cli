@@ -6,17 +6,17 @@ description: Build a reactivation (win-back) list of valuable customers who stop
 
 Run from the project root. Customers are merged by NIF (`entity_key`), walk-in excluded.
 
-1. **Size of the problem (RFM)**: `py -m bi run_saved_query --name customers_rfm_summary`
+1. **Size of the problem (RFM)**: `uv run ggest run_saved_query --name customers_rfm_summary`
    Labels 4 "Não pode perder" (bought a lot, ~2 years absent) and 5 "Em risco" are the targets.
 2. **Campaign list with what they bought**:
-   `py -m bi run_saved_query --name customers_winback_products --params '{"min_net":500,"inactive_days":540,"limit":50}' --json`
+   `uv run ggest run_saved_query --name customers_winback_products --params '{"min_net":500,"inactive_days":540,"limit":50}' --json`
    - Narrow: `"segment":"empresa"` (or publico / particular / associativo); shorter absence: `"inactive_days":365`.
-3. **RFM detail of label 4**: `py -m bi run_saved_query --name customers_rfm --params '{"label":"4","limit":100}'`
+3. **RFM detail of label 4**: `uv run ggest run_saved_query --name customers_rfm --params '{"label":"4","limit":100}'`
 4. **Repair-only customers to convert** (come to the workshop, buy little):
-   `py -m bi run_saved_query --name customers_repairs_vs_purchases --params '{"quadrant":"repara_muito_compra_pouco"}'`
+   `uv run ggest run_saved_query --name customers_repairs_vs_purchases --params '{"quadrant":"repara_muito_compra_pouco"}'`
 5. Public bodies: before declaring one lost, check if it now buys under another NIF/name:
-   `py -m bi run_saved_query --name customers_duplicates --params '{"kind":"name"}'` and
-   `py -m bi run_saved_query --name customers_briefing --params '{"customer":"<part of name>"}'`.
+   `uv run ggest run_saved_query --name customers_duplicates --params '{"kind":"name"}'` and
+   `uv run ggest run_saved_query --name customers_briefing --params '{"customer":"<part of name>"}'`.
 
 ## Prioritise
 1. `still_in_touch = 1` (repaired, asked a quote or had an appointment after the last purchase): warm, easy to call.

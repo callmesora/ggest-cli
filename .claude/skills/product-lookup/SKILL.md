@@ -9,15 +9,15 @@ Run from the project root (bash quoting; in PowerShell 5.1 escape inner quotes a
 ## Steps
 1. Find the item and its profile (code, description, family, brand, price net, last purchase price and supplier,
    stock, sales and margin per year, top customers):
-   `py -m bi product_profile --query "800 G3"` — if it returns `ambiguous`, pick the code (prefer the one with stock
-   or recent sales) and run again with the exact code: `py -m bi product_profile --query ecopchp800g3mini`.
+   `uv run ggest product_profile --query "800 G3"` — if it returns `ambiguous`, pick the code (prefer the one with stock
+   or recent sales) and run again with the exact code: `uv run ggest product_profile --query ecopchp800g3mini`.
 2. Latest movements (sales with customer/price/cost/margin, purchases with supplier/net unit price, quotes):
-   `py -m bi run_saved_query --name sales_item_transactions --params '{"item_code": "ecopchp800g3mini", "limit": 30}'`
-3. Is it on the web shop? `py -m bi query --sql "SELECT item_code, online_name, is_active, is_visible, synced_on FROM online_items WHERE item_code = 'ecopchp800g3mini'"`
+   `uv run ggest run_saved_query --name sales_item_transactions --params '{"item_code": "ecopchp800g3mini", "limit": 30}'`
+3. Is it on the web shop? `uv run ggest query --sql "SELECT item_code, online_name, is_active, is_visible, synced_on FROM online_items WHERE item_code = 'ecopchp800g3mini'"`
 4. Family-level context (refurbished, a model range, a brand) when the question is broader than one code:
-   `py -m bi run_saved_query --name sales_item_search_by_year --params '{"pattern": "%800 g3%", "pattern2": ""}'`
-   or `py -m bi sales_by_category --level brand --start 2025-01-01 --end 2026-11-07`.
-5. Alternatives in stock (same family): `py -m bi query --sql "SELECT item_code, description, price_net, stock_qty FROM items WHERE family_name = 'MINI PC' AND stock_qty > 0 ORDER BY price_net"`.
+   `uv run ggest run_saved_query --name sales_item_search_by_year --params '{"pattern": "%800 g3%", "pattern2": ""}'`
+   or `uv run ggest sales_by_category --level brand --start 2025-01-01 --end 2026-11-07`.
+5. Alternatives in stock (same family): `uv run ggest query --sql "SELECT item_code, description, price_net, stock_qty FROM items WHERE family_name = 'MINI PC' AND stock_qty > 0 ORDER BY price_net"`.
 
 ## Reading the numbers
 - `price_net` is the catalogue price **without VAT**; price with VAT = `price_gross` (Azores VAT, 16 % now).

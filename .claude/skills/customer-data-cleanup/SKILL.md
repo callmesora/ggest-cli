@@ -7,13 +7,13 @@ description: Find customer records to fix in gGest — duplicate records, invali
 Run from the project root. Results show codes and names only — **never export phones/e-mails in bulk**; the person
 fixing the data opens each record in gGest.
 
-1. **Overview of problems**: `py -m bi run_saved_query --name customers_data_quality_summary --json`
+1. **Overview of problems**: `uv run ggest run_saved_query --name customers_data_quality_summary --json`
 2. **Contact completeness** by segment and status (active / lapsed / never):
-   `py -m bi run_saved_query --name customers_contact_completeness` (`"by":"segment"` or `"status"` for fewer rows).
+   `uv run ggest run_saved_query --name customers_contact_completeness` (`"by":"segment"` or `"status"` for fewer rows).
 3. **Records to fix**, one issue at a time (`issue` = invalid_nif | missing_nif_buyer | no_contact_active |
    partial_postal_code | same_nif_same_name | inactive_flag_but_buying):
-   `py -m bi run_saved_query --name customers_data_quality --params '{"issue":"same_nif_same_name","limit":50}'`
-4. **Duplicates in depth**: same NIF `py -m bi run_saved_query --name customers_duplicates --params '{"kind":"nif"}'`;
+   `uv run ggest run_saved_query --name customers_data_quality --params '{"issue":"same_nif_same_name","limit":50}'`
+4. **Duplicates in depth**: same NIF `uv run ggest run_saved_query --name customers_duplicates --params '{"kind":"nif"}'`;
    same name (often without NIF) `--params '{"kind":"name"}'`.
 
 ## How to judge

@@ -1,6 +1,6 @@
 # Operations: team activity in gGest
 
-Views in `bi/sql/ext/operations.sql` (apply: `py -m bi build-views --file bi/sql/ext/operations.sql`), saved queries
+Views in `bi/sql/ext/operations.sql` (apply: `uv run ggest build-views --file bi/sql/ext/operations.sql`), saved queries
 in `bi/queries/operations/`, skill `team-activity`. Purpose: workload, staffing and process questions answered with
 aggregates — not individual monitoring (no per-person timelines, no attendance tools).
 
