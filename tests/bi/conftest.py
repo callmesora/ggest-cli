@@ -1,5 +1,6 @@
 """A tiny synthetic gGest database (fake names and figures) with the business views as plain tables."""
 
+import os
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -100,7 +101,8 @@ def fake_db(tmp_path: Path) -> Iterator[Path]:
     dates._words_for_db.cache_clear()
 
 
-LIVE_DB = Path(__file__).resolve().parents[2] / "data" / "data.sqlite"
+LIVE_DB = Path(os.environ.get("GGEST_DB") or Path(__file__).resolve().parents[2] / "data" / "data.sqlite")
+# livedb tests: data/data.sqlite in this folder, or the database GGEST_DB points to
 
 
 @pytest.fixture

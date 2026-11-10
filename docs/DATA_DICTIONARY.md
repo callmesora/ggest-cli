@@ -2,7 +2,8 @@
 
 Data exported from the **gGest** ERP (Golfinho Software, WinDev/HFSQL). Built and tested on the database of a
 computer shop (hardware sales, repairs/*assistências*, IT services and software); the schema is the same in
-every gGest database, the company-specific meaning lives in `ggest.json` (see Configuration).
+every gGest database, the company-specific meaning lives in `ggest.json` (see Configuration). Examples and caveats
+below that mention the Azores, islands or specific series describe that reference company; check them against yours.
 
 - Database: one SQLite file per gGest database (default `data/data.sqlite`; `--db` to choose): raw gGest tables
   (all values TEXT, exactly as exported) + **business views** (`bi/sql/semantic.sql` core, `bi/sql/ext/*.sql` per

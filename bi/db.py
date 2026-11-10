@@ -48,7 +48,9 @@ def view_files() -> list[Path]:
 def connect(*, read_only: bool = True) -> sqlite3.Connection:
     path = db_path()
     if not path.exists():
-        raise FileNotFoundError(f"database not found: {path} (build it with pipeline/build_sqlite.py)")
+        raise FileNotFoundError(
+            f"database not found: {path} (build it with pipeline/refresh.py, or point to it with --db or GGEST_DB)"
+        )
     if read_only:  # waits while views are being rebuilt
         con = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True, timeout=60)
     else:  # waits for readers to finish

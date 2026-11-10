@@ -35,7 +35,8 @@ data/data.sqlite      raw gGest tables + business views (bi/sql) + company setti
 
 ## Quick start (Windows)
 
-**1. Install** [uv](https://docs.astral.sh/uv/) and the project. uv installs Python 3.12+ and every dependency.
+**1. Install** [uv](https://docs.astral.sh/uv/) and the project. uv installs Python 3.12+ and every dependency. Open
+a new terminal after installing uv so it is on your PATH.
 
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
@@ -50,19 +51,22 @@ uv sync
 uv run python pipeline/refresh.py --source "\\SERVER\gGest\Dados" --reader native
 ```
 
-This takes about 2 minutes. It copies the folder, reads every table, builds `data/data.sqlite` with the views, and
-replaces the old database only when the new one is complete. You also need **WDMap**, from the free WINDEV Express
-edition, because tables the native reader does not recognise are exported with it and learned. It is expected at
+It copies the folder, reads every table, builds `data/data.sqlite` with the views, and replaces the old database
+only when the new one is complete. Reading takes a few minutes; building the database can take 10–15 minutes on a
+large company. **WDMap** (free WINDEV Express edition) is required with both readers: the native reader hands it
+the few tables it does not recognise (the log lists them; "keep using WDMap" there is normal). It is expected at
 `C:\PC SOFT\WINDEV 28 Express\Programs\WDMAP.exe`; set the `WDMAP` environment variable if it lives elsewhere.
 Useful options:
 
 - `--reader wdmap` exports everything with WDMap (about 25 minutes).
-- `--out <folder>` builds another company's database.
+- `--out <folder>` builds the database in another folder (e.g. for another company; see "Several companies").
 - `--tables a,b` exports only those tables, for quick tests.
 
-**3. Configure it once per database.** Copy `bi/config.example.json` to `data/ggest.json`, keep the keys that apply,
-then run `uv run ggest build-views`. An agent can do this with the `new-database-setup` skill, which reads the
-`setup_*` queries.
+**3. Configure it once per database (optional at first).** The defaults (`bi/config.default.json`) work for any
+gGest company. Company rules go in a `ggest.json` **next to the database** (`data/ggest.json`, or `<out>\ggest.json`).
+Start with `{}` and add only keys you know apply: `bi/config.example.json` documents each one with made-up values,
+so don't copy it as is. Then run `uv run ggest build-views`. The `new-database-setup` skill walks an agent through
+this with the `setup_sales_doc_types`, `setup_invoice_series` and `setup_expense_creditors` queries.
 
 **4. Ask.** Use any of the three ways below.
 
@@ -84,6 +88,8 @@ uv run ggest query --sql "SELECT year, SUM(net) FROM sales_facts GROUP BY 1"
 - Dates accept words: `today` (the last document date in the data), `year_start`, `today_last_year`,
   `last_year`, ...
 - Long results come in pages; the output says which `--offset` gives the next page.
+- Commands use `data/data.sqlite`. For a database built elsewhere add `--db <folder>\data.sqlite` or set the
+  `GGEST_DB` environment variable.
 
 **Chat app**
 
@@ -97,7 +103,9 @@ A desktop-style chat in the browser:
 - **Answers** stream in, with the tool steps the assistant took.
 - **Inline widgets:** KPI cards, charts, tables, callouts and clickable follow-up questions.
 
-On first start, paste an [OpenRouter](https://openrouter.ai/keys) key and pick a model. The default is DeepSeek V4.1
+On first start, paste an [OpenRouter](https://openrouter.ai/keys) key and pick a model. The app opens with a project
+for `data/data.sqlite`; add more with **+** next to *Projects* (name and database file). `--port` and `--no-browser`
+are available. The default is DeepSeek V4.1
 Flash; the list has other low-cost models and Claude, and Settings accepts any OpenRouter model id. The key and the
 chats stay on this computer (`data/assistant.sqlite`), and the app only listens on localhost. The system prompt and
 widget examples are in `assistant/prompts.py`.
@@ -117,7 +125,7 @@ reach it from any interface:
 
 - **CLI:** add `--db D:\gGest\CompanyB\data.sqlite`.
 - **MCP:** register one server entry per database.
-- **Chat app:** add one project per database.
+- **Chat app:** add one project per database (**+** next to *Projects*).
 
 ## Layout
 
@@ -149,6 +157,9 @@ uv run ruff check . ; uv run ruff format --check .
 uv run pytest --cov --cov-report=json
 uv run python scripts/crap.py --max 30
 ```
+
+Tests run on a synthetic database. The `livedb` tests also run when `data/data.sqlite` exists (or `GGEST_DB` points to
+a database); otherwise they are skipped.
 
 ## Native reader
 

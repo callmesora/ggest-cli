@@ -115,7 +115,10 @@ def relearn(fic_dir: Path, xml_dir: Path, names: list[str], lay_dir: Path = LAYO
         shutil.copy2(main_json, str(main_json) + ".bak")
         main_json.write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
         write_validation(main_val, vrows)
-    log(f"    re-learned {len(kept)} table(s): {', '.join(kept[:SHOWN])}{' ...' if len(kept) > SHOWN else ''}")
+    if kept:
+        log(f"    re-learned {len(kept)} table(s): {', '.join(kept[:SHOWN])}{' ...' if len(kept) > SHOWN else ''}")
+    else:
+        log("    no new layout reproduced WDMap exactly; these tables keep using WDMap (normal for a few tables)")
     tmp.unlink(missing_ok=True)
     tval.unlink(missing_ok=True)
 
