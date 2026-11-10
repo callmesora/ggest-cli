@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 from pathlib import Path
 
 import httpx
@@ -338,3 +339,37 @@ def test_stopping_keeps_the_partial_answer(gdb: Path, fake_router) -> None:
     last = store.messages(turn.session_id)[-1]
     assert last["role"] == "assistant"
     assert last["content"].endswith(agent.STOPPED)
+
+
+# --- the prompt's widget examples must be drawable by the UI (assistant/static/js/widgets.js) -------------
+
+ELEMENT = re.compile(r"<ui-element\s+type\s*=\s*[\"']([\w-]+)[\"']\s*>([\s\S]*?)</ui-element>")  # as content.js
+RENDERABLE = {"kpis", "chart", "breakdown", "table", "callout", "suggestions"}
+
+
+def _check_widget(kind: str, data: dict) -> None:
+    if kind == "kpis":
+        assert all({"label", "value"} <= set(item) for item in data["items"])
+    elif kind == "chart":
+        assert data["kind"] in {"bar", "line"}
+        for series in data["series"]:
+            assert len(series["values"]) == len(data["x"])
+            assert all(isinstance(v, int | float) for v in series["values"])
+    elif kind == "breakdown":
+        assert all(isinstance(item["value"], int | float) for item in data["items"])
+    elif kind == "table":
+        assert all(len(row) == len(data["columns"]) for row in data["rows"])
+        assert len(data.get("align", data["columns"])) == len(data["columns"])
+    elif kind == "callout":
+        assert data["tone"] in {"info", "success", "warning", "danger"}
+    else:
+        assert all(isinstance(q, str) for q in data["items"])
+
+
+def test_prompt_widget_examples_are_renderable() -> None:
+    text = prompts.system_prompt({"name": "Shop", "instructions": ""}, "2026-03-01")
+    found = [(kind, body) for kind, body in ELEMENT.findall(text) if kind != "TYPE"]  # TYPE: the syntax line
+    assert {kind for kind, _ in found} == RENDERABLE  # every type is shown at least once
+    assert len(found) == 14  # 6 reference examples + 8 in the worked answers
+    for kind, body in found:
+        _check_widget(kind, json.loads(body))
