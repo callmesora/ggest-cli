@@ -1,5 +1,5 @@
 -- Repairs / after-sales extension views (assistência técnica, serial numbers, supplier RMA).
--- Depends only on raw gGest tables and core views. Applied with: py -m bi build-views --file bi/sql/ext/repairs.sql
+-- Depends only on raw gGest tables and core views. Applied with: uv run ggest build-views --file bi/sql/ext/repairs.sql
 -- Free-text repair fields (fault, diagnosis, RMA notes) can contain customer passwords/PINs: these views expose
 -- them only where needed for a single-order lookup; saved queries must not list them in bulk.
 

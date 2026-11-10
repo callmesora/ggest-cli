@@ -1,5 +1,5 @@
 -- Customers & CRM domain views (depend only on core views and raw gGest tables).
--- Apply with: py -m bi build-views --file bi/sql/ext/customers.sql
+-- Apply with: uv run ggest build-views --file bi/sql/ext/customers.sql
 -- Documentation: docs/domains/customers.md
 
 -- customer_dim: one row per customer record (Clientes) with the derived segment, legal-entity key, data-quality

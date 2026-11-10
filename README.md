@@ -1,106 +1,167 @@
 # ggest-cli
 
-Read-only business toolkit for **gGest** (Golfinho Software's WinDev / HFSQL ERP), built for AI agents and people:
-export a gGest database to SQLite without the `.wdd` analysis file, then answer business questions through
-business views, a CLI, 139 documented saved queries, 26 agent skills and an MCP server.
+Ask business questions about a company that runs **gGest** (Golfinho Software's ERP, built on WinDev / HFSQL):
+sales, margin, customers, quotes, repairs, stock, purchasing, receivables, payables, VAT. The toolkit copies the
+gGest data into a SQLite file (no `.wdd` analysis file needed), adds business views on top, and answers through a
+command line, an MCP server for AI agents, and a chat app for people. Everything is **read-only**: nothing is ever
+written to gGest.
+
+## How it works
 
 ```
-pipeline/          .fic/.ndx/.mmo -> SQLite. Native reader (learned layouts) or WDMap on a hidden desktop
-bi/                views (sql/), typed tools (metrics/), saved queries (queries/<domain>/), click CLI, FastMCP server
-tests/             pytest suite on a synthetic database (+ `livedb` checks on a real one)
-.claude/skills/    agent skills: business review, customer briefing, collections, repair desk, reorder, ...
-docs/              DATA_DICTIONARY.md + domains/<domain>.md (tables, codes, traps)
-AGENTS.md          start here if you are an agent
+gGest data folder (.fic/.ndx/.mmo)
+        │  pipeline/refresh.py: copies the folder, reads every table (native reader, or WDMap as fallback)
+        ▼
+data/data.sqlite      raw gGest tables + business views (bi/sql) + company settings (ggest.json)
+        │
+        │  bi/: 23 typed tools + 139 documented saved queries (bi/queries/<domain>/*.sql)
+        ├──▶ CLI            uv run ggest …        people, scripts, agents in a terminal
+        ├──▶ MCP server     uv run ggest-mcp      Claude Code, Claude Desktop, any MCP client
+        └──▶ Chat app       uv run ggest-app      people, in the browser (OpenRouter models)
+
+.claude/skills/   26 step-by-step recipes for agents (business review, collections, repair desk, reorder, ...)
 ```
 
-Requirements: Windows and [uv](https://docs.astral.sh/uv/); `uv sync` installs Python 3.12+, click and FastMCP. WDMap (WINDEV 28, free Express edition, no
-activation) is needed only for the first export and for tables the native reader does not know.
-Nothing writes to gGest: the pipeline copies the files first.
+- **Business views** turn gGest's tables into readable ones: `sales_facts` (one row per sales line with cost and
+  margin), `customers`, `customer_dim`, `repairs`, `receivable_docs`, `stock_items`, ...
+  `docs/DATA_DICTIONARY.md` defines every column and rule: money net of VAT, credit notes negative, cancelled and
+  internal documents excluded.
+- **Company settings** (`ggest.json`, one per database) hold what differs between companies: internal document
+  types, invoice series that are a business unit, service items, expense categories, customer regions.
+- **One tool definition** feeds the CLI, the MCP server and the chat app. A tool is a typed Python function, and
+  its signature is the schema.
+- **Safety:** the SQL tool accepts one SELECT only. Credential tables and columns that gGest stores in clear are
+  refused (passwords, tokens, bank numbers), and repair notes are never returned in bulk.
 
-## 1. Build the database
+## Quick start (Windows)
 
-```bash
-uv run python pipeline/refresh.py --source "<gGest data folder>" --reader native
+**1. Install** [uv](https://docs.astral.sh/uv/) and the project. uv installs Python 3.12+ and every dependency.
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+git clone https://github.com/callmesora/ggest-cli.git
+cd ggest-cli
+uv sync
 ```
 
-Copies the folder, reads every table (native reader: ~2 min; tables without a validated layout fall back to WDMap
-and are learned from it), builds `data/data.sqlite` with the business views and extracts memo attachments. The
-new database replaces the old one only when complete. `--reader wdmap` (default) exports everything with WDMap
-(~25 min). Other options: `--out <folder>` (another database), `--workers N`, `--tables a,b`, `--keep-work`.
+**2. Build the database** from a gGest data folder (a network share is fine; it is only read):
 
-## 2. Configure what is company-specific (once per database)
+```powershell
+uv run python pipeline/refresh.py --source "\\SERVER\gGest\Dados" --reader native
+```
 
-Copy `bi/config.example.json` to `ggest.json` next to `data.sqlite`: internal document types, invoice series that
-are a business unit (e.g. a franchise corner) or not trading revenue, expense categories, regions. Then
-`uv run ggest build-views`. The `new-database-setup` skill walks an agent through it with the `setup_*` queries.
+This takes about 2 minutes. It copies the folder, reads every table, builds `data/data.sqlite` with the views, and
+replaces the old database only when the new one is complete. You also need **WDMap**, from the free WINDEV Express
+edition, because tables the native reader does not recognise are exported with it and learned. It is expected at
+`C:\PC SOFT\WINDEV 28 Express\Programs\WDMAP.exe`; set the `WDMAP` environment variable if it lives elsewhere.
+Useful options:
 
-## 3. Ask
+- `--reader wdmap` exports everything with WDMap (about 25 minutes).
+- `--out <folder>` builds another company's database.
+- `--tables a,b` exports only those tables, for quick tests.
 
-```bash
-uv run ggest run_saved_query --name management_kpi_snapshot     # the business at a glance + data date
-uv run ggest run_saved_query --name management_change_drivers --params dim=segment
+**3. Configure it once per database.** Copy `bi/config.example.json` to `data/ggest.json`, keep the keys that apply,
+then run `uv run ggest build-views`. An agent can do this with the `new-database-setup` skill, which reads the
+`setup_*` queries.
+
+**4. Ask.** Use any of the three ways below.
+
+## Use it
+
+**Command line**
+
+```powershell
+uv run ggest run_saved_query --name management_kpi_snapshot      # the business at a glance + the data date
 uv run ggest year_over_year
-uv run ggest top_customers --start year_start --segment empresa
-uv run ggest saved_queries --search "warranty"                  # find a saved query
+uv run ggest top_customers --start year_start --limit 10
+uv run ggest run_saved_query --name management_change_drivers --params dim=segment
+uv run ggest saved_queries --search "warranty"                   # find a saved query (one line each)
 uv run ggest query --sql "SELECT year, SUM(net) FROM sales_facts GROUP BY 1"
-uv run ggest --db D:/other/data.sqlite kpis                     # another gGest database
 ```
 
-`uv run ggest list` shows every tool; `--json` for machine-readable output; `--params` takes JSON or `k=v,k=v`.
-Date words work in any date parameter: `today` (= last document date in the data), `year_start`,
-`today_last_year`, `this_year`, `last_year`, ... `uv run ggest check-queries` runs the whole library.
+- `uv run ggest list` shows every tool, and `--help` works on any of them.
+- `--json` gives machine-readable output. `--params` takes JSON or `k=v,k=v`.
+- Dates accept words: `today` (the last document date in the data), `year_start`, `today_last_year`,
+  `last_year`, ...
+- Long results come in pages; the output says which `--offset` gives the next page.
 
-## Chat assistant (desktop-style web app)
+**Chat app**
 
-```bash
-uv run ggest-app            # opens http://127.0.0.1:8765 in the browser
+```powershell
+uv run ggest-app          # opens http://127.0.0.1:8765
 ```
 
-A local chat app in the style of desktop coding assistants: **projects** (one per gGest database) with their
-**chats** in the sidebar, answers streamed with the tool steps the assistant took, and inline widgets (KPI cards,
-charts, breakdowns, tables, callouts, clickable follow-up questions) drawn from `<ui-element>` blocks the model
-writes. On first start, paste an [OpenRouter](https://openrouter.ai/keys) API key and pick a model (DeepSeek V4.1 Flash by default, other low-cost
-Chinese models, Claude, or any OpenRouter model id); each chat can switch model. The key, projects and chats stay on
-this computer (`data/assistant.sqlite`); the server only listens on localhost. Code: `assistant/` (Starlette
-server, agent loop, OpenRouter client, system prompt in `prompts.py`, UI in `assistant/static/`).
+A desktop-style chat in the browser:
 
-## 4. Agents
+- **Projects** in a sidebar, one per gGest database, each holding its chats.
+- **Answers** stream in, with the tool steps the assistant took.
+- **Inline widgets:** KPI cards, charts, tables, callouts and clickable follow-up questions.
 
-- **Claude Code**: open this folder. `CLAUDE.md`/`AGENTS.md` and the skills in `.claude/skills/` load automatically,
-  and `.mcp.json` registers the MCP server.
-- **Any MCP client**: command `py`, args `["-m", "bi.mcp_server", "--db", "<path>/data.sqlite"]`, cwd = this folder.
-  One server entry per database.
-- **Other agents**: point them at `AGENTS.md`; the skills are plain Markdown recipes of CLI commands.
+On first start, paste an [OpenRouter](https://openrouter.ai/keys) key and pick a model. The default is DeepSeek V4.1
+Flash; the list has other low-cost models and Claude, and Settings accepts any OpenRouter model id. The key and the
+chats stay on this computer (`data/assistant.sqlite`), and the app only listens on localhost. The system prompt and
+widget examples are in `assistant/prompts.py`.
 
-All tools are read-only: `query` accepts one SELECT, and credential tables/columns that gGest stores in clear
-(user passwords, e-mail/web-shop passwords, tokens, bank numbers) are refused. Repair free text is never returned
-in bulk.
+**AI agents**
+
+- **Claude Code:** open this folder. `CLAUDE.md`, `AGENTS.md`, the skills and the MCP server (`.mcp.json`) load
+  automatically.
+- **Any MCP client:** add a server with command `uv` and args
+  `["run", "--directory", "<this folder>", "ggest-mcp", "--db", "<path>/data.sqlite"]`.
+- **Other agents:** point them at `AGENTS.md`. The skills are plain Markdown recipes of CLI commands.
+
+## Several companies
+
+Build one SQLite file per gGest database (`--out D:\gGest\CompanyB`), with its own `ggest.json` next to it. Then
+reach it from any interface:
+
+- **CLI:** add `--db D:\gGest\CompanyB\data.sqlite`.
+- **MCP:** register one server entry per database.
+- **Chat app:** add one project per database.
+
+## Layout
+
+```
+pipeline/       gGest files → SQLite: native .fic reader + learned layouts, WDMap fallback, memo extraction
+bi/             views (sql/), tools (metrics/), saved queries (queries/), CLI, MCP server, settings (config*.json)
+assistant/      chat app: Starlette server, agent loop, OpenRouter client, prompt, UI (static/)
+dashboards/     optional: exports JSON datasets for a dashboard page
+.claude/skills/ agent skills          docs/  data dictionary + per-domain notes (tables, codes, traps)
+tests/          pytest on synthetic data (+ `livedb` checks when data/data.sqlite exists)
+scripts/        crap.py (complexity × coverage per function)
+```
 
 ## Extend
 
-A `.sql` file with a `-- name / -- description / -- params` header in `bi/queries/<domain>/` becomes a saved query;
-a typed function with `@tool` in `bi/metrics/` becomes both a CLI command and an MCP tool (its signature is the
-schema); a view goes in `bi/sql/ext/<domain>.sql`; a skill in `.claude/skills/<name>/SKILL.md`. Details in
-`AGENTS.md`.
+- **New question:** add a `.sql` file in `bi/queries/<domain>/` with `-- name`, `-- description` and `-- params`
+  headers. It becomes a saved query.
+- **New tool:** write a typed function with `@tool` in `bi/metrics/`. It becomes a CLI command, an MCP tool and a
+  chat-app tool.
+- **New view:** add it to `bi/sql/ext/<domain>.sql`.
+- **New skill:** add `.claude/skills/<name>/SKILL.md`.
+
+Conventions are in `AGENTS.md`.
 
 ## Develop
 
-```bash
-uv sync
-uv run ruff check . && uv run ruff format --check .
+```powershell
+uv run ruff check . ; uv run ruff format --check .
 uv run pytest --cov --cov-report=json
-uv run python scripts/crap.py --max 30      # complexity x coverage, per function
+uv run python scripts/crap.py --max 30
 ```
 
-## Native reader (how it works)
+## Native reader
 
-HFSQL Classic records sit at a fixed stride after a scrambled description block. The reader frames records
-from the file's control block, and decodes columns with per-table layouts (`pipeline/layouts/ggest_layouts.json`)
-learned by matching raw bytes against a WDMap export (`fic_layout.py`). `validate_reader.py` checks every
-table row by row against WDMap (253 of 257 non-empty tables exact on the reference database; the rest fall back
-to WDMap). A table whose structure fingerprint changes after a gGest update falls back to WDMap and is re-learned.
+HFSQL Classic files store records at a fixed stride after a scrambled header:
+
+- **Reading:** the reader finds the records from the file's control block, then decodes each column with a per-table
+  layout (`pipeline/layouts/ggest_layouts.json`).
+- **Learning a layout:** `fic_layout.py` matches the raw bytes against a WDMap export.
+- **Checking:** `validate_reader.py` compares every table row by row with WDMap. On the reference database, 253 of
+  257 non-empty tables match exactly; the other four are read through WDMap.
+- **After a gGest update:** a table whose structure changed falls back to WDMap and is learned again.
 
 ## Privacy
 
-`data/` holds the whole business (customers, tax numbers, repair notes, credentials stored by gGest) and is
-git-ignored, as are `ggest.json`, dashboard datasets and reports. Keep them out of this repository.
+`data/` holds the whole business: customers, tax numbers, repair notes, and credentials stored by gGest. It is
+git-ignored, and so are `ggest.json`, dashboard datasets and reports. Keep them out of the repository.

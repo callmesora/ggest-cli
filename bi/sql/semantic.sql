@@ -5,7 +5,7 @@
 --   * credit notes count negative (sign = -1)
 --   * internal consumption / sponsorship documents are flagged (is_internal) so they can be left out
 --   * amounts are NET of VAT unless the column name says gross / vat
--- Recreate with: py -m bi build-views   (idempotent)
+-- Recreate with: uv run ggest build-views   (idempotent)
 
 CREATE INDEX IF NOT EXISTS ix_lin_vendas_doc ON lin_vendas(Codigo, serie, numero);
 CREATE INDEX IF NOT EXISTS ix_artigos_codigo ON Artigos(Codigo);
@@ -155,7 +155,7 @@ FROM k;
 
 -- Cost-to-sales ratio of products whose cost is known, per family and overall: used to ESTIMATE the cost
 -- of product lines without one (cost_source 'unknown' -> 'estimated').
--- (materialised as tables for speed; rebuilt by `py -m bi build-views`)
+-- (materialised as tables for speed; rebuilt by `uv run ggest build-views`)
 DROP TABLE IF EXISTS product_cost_ratios;
 CREATE TABLE product_cost_ratios AS
 SELECT group_code, family_code, SUM(qty * unit_cost) / SUM(net) AS cost_ratio, SUM(net) AS basis_net

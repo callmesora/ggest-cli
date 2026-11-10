@@ -1,7 +1,7 @@
 """Key facts quoted in the dashboard's summary tab (Resumo).
 
 Each fact is one row: id, value, unit (eur | pct | count | year), description, source (saved query / view).
-Used by export_datasets.py; run it on its own to print the facts:  py dashboards/key_facts.py
+Used by export_datasets.py; run it on its own to print the facts:  uv run python dashboards/key_facts.py
 """
 
 from __future__ import annotations

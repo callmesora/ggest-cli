@@ -1,6 +1,6 @@
 """Export the aggregated datasets behind the Inforbyte BI dashboard (JSON, one file per dataset).
 
-Run from the inforbyte-bi folder:  py dashboards/export_datasets.py [--out <folder>]
+Run from the project folder:  uv run python dashboards/export_datasets.py [--out <folder>]
 Output: dashboards/datasets/<name>.json (+ _meta.json) — aggregates only (plus top-customer names), no raw records.
 
 This module holds the core datasets and the single entry point; the other dataset groups live in key_facts.py,

@@ -1,5 +1,5 @@
 {
-  "_doc": "Copy to ggest.json next to data.sqlite (or point GGEST_CONFIG at it), adapt, then run: py -m bi build-views. Keys you leave out keep their defaults (bi/config.default.json). Lists replace the default list.",
+  "_doc": "Copy to ggest.json next to data.sqlite (or point GGEST_CONFIG at it), adapt, then run: uv run ggest build-views. Keys you leave out keep their defaults (bi/config.default.json). Lists replace the default list.",
   "company_name": "My Shop",
   "home_region": "Home island",
   "internal_doc_types": ["FRCIN", "NCCIR"],

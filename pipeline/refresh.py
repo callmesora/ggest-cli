@@ -1,6 +1,6 @@
 r"""Refresh everything from a gGest data folder in one command.
 
-    py pipeline/refresh.py --source "\\\\SERVIDOR\\gGest\\Dados"
+    uv run python pipeline/refresh.py --source "\\\\SERVIDOR\\gGest\\Dados"
 
 Steps (nothing appears on screen, no clicking; you can keep using the PC):
   1. copy the data folder (.fic/.ndx/.mmo) to a work folder — the live files are only read, never opened by WDMap

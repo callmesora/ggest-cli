@@ -1,6 +1,6 @@
 -- Sales domain extension: quotes / pro-formas / orders (cab_outros, module OTC), delivery notes (cab_guias,
 -- module GIC) and the online-shop catalogue (Ecom_Artigos). Depends only on core views and raw gGest tables.
--- Apply with: py -m bi build-views --file bi/sql/ext/sales.sql
+-- Apply with: uv run ggest build-views --file bi/sql/ext/sales.sql
 --
 -- gGest "outros documentos para clientes" (cab_outros/lin_outros), by doc type (see doc_types.fiscal_type):
 --   ORC quote (orçamento, OR) · FPF pro-forma invoice (PF) · ENC customer order (encomenda, NE)

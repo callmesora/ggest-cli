@@ -3,7 +3,7 @@
 # Usage: hidden_export.ps1 -DataDir <dir with .fic> -OutDir <dir> [-Worker 0 -Workers 1] [-Tables a,b]
 param([string]$DataDir, [string]$OutDir, [int]$Worker = 0, [int]$Workers = 1, [string[]]$Tables = @())
 . "$PSScriptRoot\hidden_lib.ps1"
-$WDMAP = "C:\PC SOFT\WINDEV 28 Express\Programs\WDMAP.exe"
+$WDMAP = if ($env:WDMAP) { $env:WDMAP } else { "C:\PC SOFT\WINDEV 28 Express\Programs\WDMAP.exe" }  # env WDMAP: another install
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 $log = Join-Path $OutDir "_log_worker$Worker.tsv"
 $Tables = @($Tables | ForEach-Object { $_ -split ',' } | Where-Object { $_ })

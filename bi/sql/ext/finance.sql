@@ -1,6 +1,6 @@
 -- Finance domain views: receivables, payables, payments, till, overheads, recurring contracts, VAT, obligations.
 -- Depend only on core views (doc_types, customers) and raw gGest tables (+ the _bi_* config tables).
--- Apply with: py -m bi build-views --file bi/sql/ext/finance.sql
+-- Apply with: uv run ggest build-views --file bi/sql/ext/finance.sql
 -- Documentation: docs/domains/finance.md
 --
 -- gGest current-account rule used throughout: Documentos.mov_cc says how a document moves the entity's
